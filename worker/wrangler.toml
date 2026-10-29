@@ -1,0 +1,17 @@
+name = "dog-quest-api"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGINS = "https://muellercodes.github.io"
+ADMIN_USERS = "MuellerCodes"   # accounts that can use admin.html (comma separated)
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dog-quest-db"
+database_id = "627ddd08-6c4c-424c-b21e-510290cadec8"
+migrations_dir = "migrations"
+
+[triggers]
+crons = ["23 6 * * *"]
