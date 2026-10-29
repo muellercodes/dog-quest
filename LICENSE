@@ -1,0 +1,60 @@
+Dog Quest
+Copyright (c) 2026 Andrew Mueller
+
+This repository holds two kinds of material under two different terms.
+
+
+1. THE STORY AND THE ART: ALL RIGHTS RESERVED
+
+The story and the art of Dog Quest are the intellectual property of Andrew Mueller.
+All rights reserved.
+
+"The story" means the world, its history and lore, the characters and creatures, their
+names and personalities, the plot, quests, mysteries and endings, and all of the writing
+in the game: dialogue, narration, letters, journal pages, books, signs, songs, quest and
+item text, and the names of people, places and things.
+
+"The art" means every visual design in the game: characters, creatures, bosses, portraits,
+buildings, rooms, furniture, places, maps, items, icons, effects and any other artwork,
+whether it is stored as an image or drawn by code.
+
+This covers in particular:
+  - the writing and names inside game/src/ (above all game/src/06b_story.js) and game/body.html
+  - the code that draws the art, including game/src/05_art.js, game/src/05b_creatures.js,
+    game/src/05c_buildings.js, game/src/04_ground.js and the drawing functions in any other file
+  - the built game (docs/index.html and any other build) taken as a whole
+  - the game section of README.md
+
+You may play the game at its official address and view this repository on GitHub. You may
+not copy, modify, adapt, publish, distribute, sell or make derivative works from the story or
+the art, in whole or in part, without written permission from Andrew Mueller.
+
+
+2. THE CODE: MIT LICENSE
+
+Everything else in this repository (the game engine and systems, the build script, the tools
+in tools/, the backend in worker/, and the admin page) is licensed under the MIT License
+below. The MIT License does not grant any rights to the story or the art described in
+section 1, even where they sit in the same file as code.
+
+MIT License
+
+Copyright (c) 2026 Andrew Mueller
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

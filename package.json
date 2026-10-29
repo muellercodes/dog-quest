@@ -1,0 +1,7 @@
+{
+  "name": "dog-quest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An open-world action RPG starring a very good dog.",
+  "scripts": { "build": "node build.mjs" }
+}

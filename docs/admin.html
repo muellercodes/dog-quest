@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dog Quest Admin</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --plum: #3b2235; --paper: #fff4dc; --gold: #ffd84d; }
+  body { margin: 0; font-family: Fredoka, ui-rounded, system-ui, sans-serif; background: #9fd66a; color: var(--plum); }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  h1 { margin: 0 0 14px; font-size: 32px; }
+  .paper { background: var(--paper); border: 4px solid var(--plum); border-radius: 18px; padding: 16px; box-shadow: 0 6px 0 rgba(59,34,53,0.3); margin-bottom: 16px; }
+  .btn { font-family: inherit; font-weight: 600; font-size: 15px; border: 3px solid var(--plum); border-radius: 12px; padding: 5px 12px; background: #fffaf0; cursor: pointer; box-shadow: 0 3px 0 var(--plum); color: var(--plum); }
+  .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--plum); }
+  .gold { background: var(--gold); } .red { background: #ff9aa6; } .blue { background: #8fc0ff; }
+  input { font-family: inherit; font-size: 16px; padding: 7px 10px; border: 3px solid var(--plum); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 2px dashed rgba(59,34,53,0.2); vertical-align: top; }
+  th { font-size: 13px; text-transform: uppercase; opacity: 0.7; }
+  .tag { display: inline-block; border: 2px solid var(--plum); border-radius: 8px; padding: 0 6px; font-size: 12px; font-weight: 700; margin-left: 4px; }
+  .paused { background: #ffd6dc; } .admin { background: var(--gold); } .flag { background: #ffb36b; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .msg { font-weight: 600; } .err { color: #c0283c; } .ok { color: #2f8a3a; }
+  .acts .btn { margin: 2px; font-size: 13px; padding: 3px 8px; }
+  .sub { font-size: 13px; opacity: 0.75; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Dog Quest Admin</h1>
+  <div id="login" class="paper">
+    <p>Sign in with an admin account.</p>
+    <div class="row"><input id="n" placeholder="Name" autocomplete="username"><input id="p" type="password" placeholder="Password" autocomplete="current-password"><button class="btn gold" id="go">Sign in</button></div>
+    <p class="msg" id="lm"></p>
+  </div>
+  <div id="app" hidden>
+    <div class="paper"><div class="row"><b id="who"></b><button class="btn" id="reload">Refresh</button><button class="btn" id="out">Sign out</button><span class="msg" id="m"></span></div></div>
+    <div class="paper"><table><thead><tr><th>Account</th><th>Journey</th><th>Last seen</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="paper" id="bk" hidden></div>
+  </div>
+  <p class="sub">Players use a name and a password, with no email. When a player forgets their password, set a new one here and tell them.</p>
+</main>
+<script>
+const API = 'https://dog-quest-api.muellercodes.workers.dev';
+let token = null; try { token = localStorage.getItem('dq_admin_token'); } catch (e) {}
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function call(method, path, body) {
+  const r = await fetch(API + path, { method, headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: 'Bearer ' + token } : {}), body: body ? JSON.stringify(body) : undefined });
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
+  return j;
+}
+const ago = (t) => { if (!t) return 'never'; const s = (Date.now() - t) / 1000; if (s < 90) return 'just now'; if (s < 5400) return Math.round(s / 60) + ' min ago'; if (s < 129600) return Math.round(s / 3600) + ' h ago'; return Math.round(s / 86400) + ' days ago'; };
+const say = (t, ok) => { const m = $('#m'); m.textContent = t; m.className = 'msg ' + (ok ? 'ok' : 'err'); };
+async function start() {
+  try { const j = await call('GET', '/api/admin/me'); $('#who').textContent = 'Signed in as ' + j.user.name; $('#login').hidden = true; $('#app').hidden = false; load(); }
+  catch (e) { token = null; try { localStorage.removeItem('dq_admin_token'); } catch (x) {} $('#login').hidden = false; $('#app').hidden = true; if (e.message !== 'Please sign in.') $('#lm').textContent = e.message; }
+}
+async function load() {
+  try {
+    const j = await call('GET', '/api/admin/users');
+    $('#rows').innerHTML = j.users.map((u) => `<tr>
+      <td><b>${esc(u.name)}</b> <span class="sub">#${u.id}</span>${u.admin ? '<span class="tag admin">admin</span>' : ''}${u.paused ? '<span class="tag paused">paused</span>' : ''}${u.name_check ? `<span class="tag flag">${esc(u.name_check)}</span>` : ''}<div class="sub">made ${ago(u.created)}</div></td>
+      <td>${u.game ? `Lv ${u.game.level}${u.game.hero ? ', ' + esc(u.game.hero) : ''}<div class="sub">${esc(u.game.chapter || '')}${u.game.done ? ' (finished!)' : ''}, ${Math.round(u.game.play / 60)} min, ${u.game.gold} gold</div>` : '<span class="sub">no save yet</span>'}</td>
+      <td>${ago(u.last_seen)}<div class="sub">${u.sessions} device${u.sessions === 1 ? '' : 's'}, ${u.backups} backup${u.backups === 1 ? '' : 's'}</div></td>
+      <td class="acts"><button class="btn blue" data-a="pw" data-id="${u.id}" data-n="${esc(u.name)}">New password</button>${u.admin ? '' : `<button class="btn" data-a="pause" data-id="${u.id}" data-p="${u.paused ? 0 : 1}">${u.paused ? 'Unpause' : 'Pause'}</button><button class="btn red" data-a="del" data-id="${u.id}" data-n="${esc(u.name)}">Delete</button>`}${u.backups ? `<button class="btn" data-a="bk" data-id="${u.id}">Backups</button>` : ''}</td></tr>`).join('');
+  } catch (e) { say(e.message); }
+}
+$('#rows').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  const id = +b.dataset.id;
+  try {
+    if (b.dataset.a === 'pw') { const np = window.prompt ? window.prompt('New password for ' + b.dataset.n + ' (8 or more letters):') : null; if (!np) return; await call('POST', '/api/admin/password', { id, password: np }); say('Password changed for ' + b.dataset.n + '. Tell them the new one.', true); }
+    if (b.dataset.a === 'pause') { await call('POST', '/api/admin/pause', { id, paused: b.dataset.p === '1' }); say('Done.', true); }
+    if (b.dataset.a === 'del') { const c = window.prompt('This deletes ' + b.dataset.n + ' and their save for good. Type the name exactly to confirm:'); if (!c) return; await call('POST', '/api/admin/delete', { id, confirm: c }); say('Deleted ' + b.dataset.n + '.', true); }
+    if (b.dataset.a === 'bk') { const j = await call('GET', '/api/admin/backups?id=' + id); $('#bk').hidden = false; $('#bk').innerHTML = `<h3>Backups for ${esc(j.user.name)}</h3>` + j.backups.map((k) => `<div class="row"><span>${new Date(k.made_at).toLocaleString()}: ${k.game ? 'Lv ' + k.game.level + ', ' + Math.round(k.game.play / 60) + ' min' : ''} <span class="sub">${esc(k.note || '')}</span></span><button class="btn" data-a="restore" data-b="${k.id}">Restore this one</button></div>`).join(''); return; }
+    load();
+  } catch (err) { say(err.message); }
+});
+$('#bk').addEventListener('click', async (e) => { const b = e.target.closest('[data-a=restore]'); if (!b) return; try { await call('POST', '/api/admin/restore', { backup: +b.dataset.b }); say('Restored. The save it replaced was backed up too.', true); $('#bk').hidden = true; load(); } catch (err) { say(err.message); } });
+$('#go').onclick = async () => {
+  try { const j = await call('POST', '/api/login', { username: $('#n').value.trim(), password: $('#p').value }); token = j.token; try { localStorage.setItem('dq_admin_token', token); } catch (e) {} start(); }
+  catch (e) { $('#lm').textContent = e.message; $('#lm').className = 'msg err'; }
+};
+$('#p').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#go').click(); });
+$('#reload').onclick = load;
+$('#out').onclick = async () => { try { await call('POST', '/api/logout'); } catch (e) {} token = null; try { localStorage.removeItem('dq_admin_token'); } catch (e) {} location.reload(); };
+if (token) start();
+</script>
+</body>
+</html>
