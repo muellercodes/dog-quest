@@ -172,8 +172,7 @@ Game.render = function (dt) {
   if (S.scene === 'world') {
     Ground.draw(c, t);
     // flat ground details
-    for (let cy = Math.max(0, Math.floor(v.y0 / PC)); cy <= Math.min(PCH - 1, Math.floor(v.y1 / PC)); cy++) for (let cx = Math.max(0, Math.floor(v.x0 / PC)); cx <= Math.min(PCW - 1, Math.floor(v.x1 / PC)); cx++)
-      for (const d of World.dgrid[cy * PCW + cx]) if (d.x > v.x0 && d.x < v.x1 && d.y > v.y0 && d.y < v.y1) drawSprite(c, decorSprite(d), d.x, d.y, 1);
+    drawDecorAll(c, v, t); // ART-WORLD
     drawDocks(c, v);
     if (G) drawTreasure(c, v, t, list);
     // scenery
@@ -233,7 +232,7 @@ function drawProp(c, p) {
   const tall = s.oy * p.s;
   const hide = Game.state !== 'title' && tall > 50 && P.y < p.y - 6 && P.y > p.y - tall * 0.95 && Math.abs(P.x - p.x) < s.w * p.s * 0.38;
   if (hide) c.globalAlpha = 0.5;
-  drawSprite(c, s, p.x, p.y, p.s);
+  drawPropSprite(c, p, s); // ART-WORLD
   c.globalAlpha = 1;
 }
 function drawDocks(c, v) {

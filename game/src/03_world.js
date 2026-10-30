@@ -164,6 +164,7 @@ World.init = function () {
   this.buildCoast();
   this.buildProps();
   this.buildTowns();
+  this.buildShade();
   this.ready = true;
   this.initMs = performance.now() - t0;
 };
@@ -231,37 +232,149 @@ World.roadDist = function (x, y) {
   return Math.sqrt(best);
 };
 
-// ---------- coast lines by marching squares (shore, foam, outer foam), stored in a grid for culling
-World.buildCoast = function () {
-  const levels = [0, -0.045, -0.12];
-  this.coast = levels.map(() => { const g = []; for (let i = 0; i < PCW * PCH; i++) g.push([]); return g; });
-  const F = this.F;
+// ---------- the raised land (visual only): the map reads as a thick plateau, so south and east coasts show a
+// cliff face. FE is the land field pushed down (and a little right) by the cliff height: where F < 0 but FE >= 0
+// the pixel is cliff face; the sea, its depth and the foam all follow FE. Gameplay still uses F alone.
+const CLIFF_H = 20, CLIFF_SKEW = 0.3, LAKE_H = 9;
+function cliffH(x, y) {
+  for (const l of LAKES) { const dx = (x - l.x) / (l.rx + 170), dy = (y - l.y) / (l.ry + 170); if (dx * dx + dy * dy < 1) return LAKE_H; }
+  return CLIFF_H;
+}
+// exact extruded field from F samples along the drop
+World.FEx = function (x, y) {
+  let f = this.Fat(x, y);
+  if (f >= 0 || f < -0.1) return f;
+  const h = cliffH(x, y);
+  for (let s = 1; s <= 4; s++) { const t = s / 4, g = this.Fat(x - CLIFF_SKEW * h * t, y - h * t); if (g > f) f = g; }
+  return f;
+};
+// bilinear sample of any grid field
+function gridAt(A, x, y) {
+  const gx = clamp(x / GS, 0, GW - 1.001), gy = clamp(y / GS, 0, GH - 1.001);
+  const i = gx | 0, j = gy | 0, fx = gx - i, fy = gy - j, k = j * GW + i;
+  const a = A[k], b = A[k + 1], c = A[k + GW], d = A[k + GW + 1];
+  return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+World.FEat = function (x, y) { return gridAt(this.FE, x, y); };
+
+// marching squares on a grid field at level L, chained into polylines, cut into short pieces for culling.
+// each piece: { p: [x,y,...], n: [nx,ny,...] (unit normal toward lower values, i.e. toward the water), bbox, s0: length at start }
+World.contours = function (A, L, pieceN) {
+  const sx = [], sy = [], ex = [], ey = [], se = [], ee = [];
+  const at = new Map();
+  const link = (e, s) => { const l = at.get(e); if (l) l.push(s); else at.set(e, [s]); };
+  const add = (e1, x1, y1, e2, x2, y2) => { const s = se.length; se.push(e1); sx.push(x1); sy.push(y1); ee.push(e2); ex.push(x2); ey.push(y2); link(e1, s); link(e2, s); };
   for (let j = 0; j < GH - 1; j++) for (let i = 0; i < GW - 1; i++) {
     const k = j * GW + i;
-    const a = F[k], b = F[k + 1], c = F[k + GW + 1], d = F[k + GW];
-    levels.forEach((L, li) => {
-      const ca = a > L, cb = b > L, cc = c > L, cd = d > L;
-      const idx = (ca ? 8 : 0) | (cb ? 4 : 0) | (cc ? 2 : 0) | (cd ? 1 : 0);
-      if (idx === 0 || idx === 15) return;
-      const x = i * GS, y = j * GS;
-      const ip = (v1, v2) => (L - v1) / (v2 - v1 || 1e-6);
-      const top = [x + GS * ip(a, b), y], right = [x + GS, y + GS * ip(b, c)], bottom = [x + GS * ip(d, c), y + GS], left = [x, y + GS * ip(a, d)];
-      const segs = [];
-      switch (idx) {
-        case 1: case 14: segs.push([left, bottom]); break;
-        case 2: case 13: segs.push([bottom, right]); break;
-        case 3: case 12: segs.push([left, right]); break;
-        case 4: case 11: segs.push([top, right]); break;
-        case 6: case 9: segs.push([top, bottom]); break;
-        case 7: case 8: segs.push([left, top]); break;
-        case 5: segs.push([left, top], [bottom, right]); break;
-        case 10: segs.push([top, right], [left, bottom]); break;
+    const a = A[k], b = A[k + 1], c = A[k + GW + 1], d = A[k + GW];
+    const idx = (a > L ? 8 : 0) | (b > L ? 4 : 0) | (c > L ? 2 : 0) | (d > L ? 1 : 0);
+    if (idx === 0 || idx === 15) continue;
+    const x = i * GS, y = j * GS;
+    const ip = (v1, v2) => (L - v1) / (v2 - v1 || 1e-6);
+    const T = [k * 2, x + GS * ip(a, b), y], R = [(k + 1) * 2 + 1, x + GS, y + GS * ip(b, c)], B = [(k + GW) * 2, x + GS * ip(d, c), y + GS], Lf = [k * 2 + 1, x, y + GS * ip(a, d)];
+    const seg = (p, q) => add(p[0], p[1], p[2], q[0], q[1], q[2]);
+    switch (idx) {
+      case 1: case 14: seg(Lf, B); break;
+      case 2: case 13: seg(B, R); break;
+      case 3: case 12: seg(Lf, R); break;
+      case 4: case 11: seg(T, R); break;
+      case 6: case 9: seg(T, B); break;
+      case 7: case 8: seg(Lf, T); break;
+      case 5: seg(Lf, T); seg(B, R); break;
+      case 10: seg(T, R); seg(Lf, B); break;
+    }
+  }
+  const used = new Uint8Array(se.length), lines = [];
+  const walk = (e, out) => {
+    for (;;) {
+      const l = at.get(e); let nx = -1;
+      if (l) for (const s of l) if (!used[s]) { nx = s; break; }
+      if (nx < 0) return e;
+      used[nx] = 1;
+      if (se[nx] === e) { out.push(ex[nx], ey[nx]); e = ee[nx]; } else { out.push(sx[nx], sy[nx]); e = se[nx]; }
+    }
+  };
+  for (let s = 0; s < se.length; s++) {
+    if (used[s]) continue;
+    used[s] = 1;
+    const fw = [sx[s], sy[s], ex[s], ey[s]], bw = [];
+    walk(ee[s], fw);
+    walk(se[s], bw);
+    const pts = [];
+    for (let i = bw.length - 2; i >= 0; i -= 2) pts.push(bw[i], bw[i + 1]);
+    for (const v of fw) pts.push(v);
+    if (pts.length >= 6) lines.push(pts);
+  }
+  // cut into pieces with normals
+  const pieces = [];
+  pieceN = pieceN || 28;
+  for (const pts of lines) {
+    const n = pts.length / 2;
+    let len = 0;
+    for (let st = 0; st < n - 1; st += pieceN - 1) {
+      const en = Math.min(n, st + pieceN), p = [], nn = [];
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      const s0 = len;
+      for (let i = st; i < en; i++) {
+        const x = pts[i * 2], y = pts[i * 2 + 1];
+        p.push(x, y);
+        if (i > st) len += Math.hypot(x - p[p.length - 4], y - p[p.length - 3]);
+        const gx = gridAt(A, x + 4, y) - gridAt(A, x - 4, y), gy = gridAt(A, x, y + 4) - gridAt(A, x, y - 4), gl = Math.hypot(gx, gy) || 1;
+        nn.push(-gx / gl, -gy / gl);
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
       }
-      const cell = Math.floor(y / PC) * PCW + Math.floor(x / PC);
-      for (const s of segs) this.coast[li][cell].push(s[0][0], s[0][1], s[1][0], s[1][1]);
-    });
+      pieces.push({ p, n: nn, x0, y0, x1, y1, s0 });
+      if (en === n) break;
+    }
+  }
+  return pieces;
+};
+
+World.buildCoast = function () {
+  const n = GW * GH, F = this.F, FE = (this.FE = new Float32Array(n));
+  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) { const k = j * GW + i; FE[k] = F[k] >= 0 || F[k] < -0.1 ? F[k] : this.FEx(i * GS, j * GS); }
+  this.shore = {
+    lip: this.contours(F, 0, 24),          // top edge of the land (the cliff lip, or the beach waterline)
+    foam: this.contours(FE, 0, 28),        // base of the cliffs and beaches: the surf line
+    ring: this.contours(FE, -0.035, 28),   // shallow-water foam ring
+    ring2: this.contours(FE, -0.085, 32),  // outer ring where the shelf drops off
+  };
+};
+
+// ---------- shade under tree clusters (visual only): a soft density grid baked into the ground
+World.buildShade = function () {
+  const TS = (this.TS = new Float32Array(GW * GH));
+  const R = { tree: 46, pine: 38, palm: 30, dead: 26, bush: 26, mountain: 150, rock: 20, srock: 20, log: 22, stump: 18, cactus: 16 };
+  for (const p of this.props) {
+    if (p.gone || !R[p.kind]) continue;
+    const r = R[p.kind] * (p.s || 1), x = p.x + r * 0.18, y = p.y - (p.kind === 'mountain' ? 20 : 2) * (p.s || 1);
+    const w = p.kind === 'tree' || p.kind === 'pine' ? 0.75 : p.kind === 'mountain' ? 0.6 : 0.5;
+    for (let gy = Math.max(0, Math.floor((y - r) / GS)); gy <= Math.min(GH - 1, Math.ceil((y + r) / GS)); gy++)
+      for (let gx = Math.max(0, Math.floor((x - r) / GS)); gx <= Math.min(GW - 1, Math.ceil((x + r) / GS)); gx++) {
+        const dx = (gx * GS - x) / r, dy = (gy * GS - y) / (r * 0.8), d = dx * dx + dy * dy;
+        if (d < 1) TS[gy * GW + gx] += (1 - d) * (1 - d) * w;
+      }
+  }
+  for (let k = 0; k < TS.length; k++) TS[k] = TS[k] > 1.4 ? 1.4 : TS[k];
+  // keep flat decor off the roads and town squares (purely visual)
+  for (let i = 0; i < this.dgrid.length; i++) {
+    const g = this.dgrid[i];
+    if (!g.length) continue;
+    const cx = (i % PCW) * PC + PC / 2, cy = Math.floor(i / PCW) * PC + PC / 2;
+    const nearRoad = this.roadSegs.some((s) => Math.min(s[0], s[2]) < cx + PC && Math.max(s[0], s[2]) > cx - PC && Math.min(s[1], s[3]) < cy + PC && Math.max(s[1], s[3]) > cy - PC);
+    const nearTown = this.plazas.some((p) => Math.abs(p.x - cx) < p.r + PC && Math.abs(p.y - cy) < p.r + PC);
+    if (!nearRoad && !nearTown) continue;
+    this.dgrid[i] = g.filter((d) => (!nearRoad || this.roadDist(d.x, d.y) > 28) && (!nearTown || !this.plazas.some((p) => inPoly(p.pts, d.x, d.y))));
   }
 };
+function inPoly(pts, x, y) {
+  let ins = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) ins = !ins;
+  }
+  return ins;
+}
 
 // ---------- scenery props
 // kinds: tree, pine, palm, dead, bush, rock, srock, cactus, mountain, mushroom, pumpkin, yarn, post, bones, log, snowman, stump
