@@ -104,17 +104,18 @@ function drawPortrait(cv2, who) {
   if (who === 'hero') { L = heroLook(); hat = G.eq.head ? ITEMS[G.eq.head].art : null; }
   else if (NPCS[who]) { L = BREEDS[NPCS[who].breed]; hat = NPCS[who].hat; }
   if (L) {
-    const k = 3.6, s = L.size || 1, bl = L.bodyLen || 1, ll = L.legLen || 1;
-    const hx = (13 * bl + 1) * k * s, hy = (-12 * ll - 20) * k * s;
-    g.save(); g.translate(W / 2 - hx, W / 2 - hy + 14);
-    drawDog(g, 0, 0, L, { face: 1, t, sc: k, hat, item, talk: true, collar: who === 'hero' ? '#e8475f' : '#4f7fd9' });
+    // every head fills the frame the same way, big dogs and puppies alike, with room for the snout
+    const k = 3.1, s = L.size || 1, bl = L.bodyLen || 1, ll = L.legLen || 1;
+    const hx = (13 * bl + 1 + 5) * k, hy = (-12 * ll - 20) * k;
+    g.save(); g.translate(W / 2 - hx, W / 2 - hy + 16);
+    drawDog(g, 0, 0, L, { face: 1, t, sc: k / s, hat, item, talk: true, collar: who === 'hero' ? '#e8475f' : '#4f7fd9' });
     g.restore(); return;
   }
   const cat = { nutsworth: 'nutsworth', whiskers: 'whiskers', snowball: 'snowball', cleocatra: 'cleocatra', mittens: 'mittens' }[who];
   if (cat) {
-    const k = 3.4, S2 = CRITTERS[cat], sq = S2.kind === 'squirrel';
-    const hx = (sq ? 7 : 14) * k, hy = (sq ? -25 : -31) * k;
-    g.save(); g.translate(W / 2 - hx, W / 2 - hy + 14); drawCritter(g, 0, 0, S2, { face: 1, t, sc: k }); g.restore();
+    const S2 = CRITTERS[cat], sq = S2.kind === 'squirrel', s = S2.size || 1, k = 3.0;
+    const hx = (sq ? 7 : 19) * k, hy = (sq ? -25 : -31) * k;
+    g.save(); g.translate(W / 2 - hx, W / 2 - hy + 14); drawCritter(g, 0, 0, S2, { face: 1, t, sc: k / s }); g.restore();
   }
 }
 
@@ -515,7 +516,8 @@ UI.updateTouch = function () {
 const HUD = { portrait: null, pkey: '' };
 HUD.draw = function (c) {
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const top = 10 + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0);
+  if (!this.satT || --this.satT <= 0) { this.satT = 90; this.sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0; }
+  const top = 10 + this.sat;
   // portrait and bars
   const key = G.hero.breed + (G.eq.head || '');
   if (this.pkey !== key) { this.pkey = key; const pc = mkCanvas(120, 120); drawPortrait(pc, 'hero'); this.portrait = pc; }
@@ -525,14 +527,26 @@ HUD.draw = function (c) {
   c.fillStyle = '#ffd84d'; c.beginPath(); rrect(c, x0 + 6, y0 + 50, 52, 20, 9); c.fill(); c.lineWidth = 3; c.stroke();
   c.fillStyle = OUT; c.font = '700 14px Fredoka, ui-rounded, sans-serif'; c.textAlign = 'center'; c.fillText('Lv ' + G.lv, x0 + 32, y0 + 65);
   const bw = Math.min(230, SW * 0.42), bx = x0 + 70;
-  const bar = (y, h, k, col, label, flash) => {
+  const bar = (y, h, k, col, label, flash, trail) => {
     c.fillStyle = OUT; c.beginPath(); rrect(c, bx - 3, y - 3, bw + 6, h + 6, (h + 6) / 2); c.fill();
     c.fillStyle = '#5a3a52'; c.beginPath(); rrect(c, bx, y, bw, h, h / 2); c.fill();
-    if (k > 0) { c.fillStyle = flash ? '#ffffff' : col; c.beginPath(); rrect(c, bx, y, Math.max(h, bw * k), h, h / 2); c.fill(); c.fillStyle = 'rgba(255,255,255,0.3)'; c.beginPath(); rrect(c, bx + 4, y + 2, Math.max(0, bw * k - 8), h * 0.3, h * 0.15); c.fill(); }
+    c.fillStyle = 'rgba(30,14,28,0.35)'; c.beginPath(); rrect(c, bx + 2, y + 1, bw - 4, h * 0.35, h * 0.17); c.fill();
+    // the chunk you just lost lingers as a pale trail, then drains away
+    if (trail != null && trail > k) { c.fillStyle = '#ffe9a8'; c.beginPath(); rrect(c, bx, y, Math.max(h, bw * trail), h, h / 2); c.fill(); }
+    if (k > 0) {
+      const w = Math.max(h, bw * k);
+      c.fillStyle = flash ? '#ffffff' : col; c.beginPath(); rrect(c, bx, y, w, h, h / 2); c.fill();
+      c.save(); c.beginPath(); rrect(c, bx, y, w, h, h / 2); c.clip();
+      c.fillStyle = 'rgba(40,20,60,0.22)'; c.fillRect(bx, y + h * 0.62, w, h);
+      c.fillStyle = 'rgba(255,255,255,0.38)'; c.beginPath(); rrect(c, bx + 4, y + 2, Math.max(0, w - 8), h * 0.28, h * 0.14); c.fill();
+      c.restore();
+    }
     if (label) { c.font = '700 13px Fredoka, ui-rounded, sans-serif'; c.textAlign = 'left'; c.lineWidth = 3; c.strokeStyle = OUT; c.strokeText(label, bx + 8, y + h - 4); c.fillStyle = '#fff'; c.fillText(label, bx + 8, y + h - 4); }
   };
   const hpK = G.hp / maxHp();
-  bar(y0 + 6, 18, hpK, hpK < 0.3 ? '#ff5a6a' : '#7fe07a', `${Math.ceil(G.hp)} / ${maxHp()}`);
+  if (this.hpTrail == null || this.hpTrail < hpK) this.hpTrail = hpK; else { this.hpHold = (this.hpTrail > hpK + 0.001 && this.hpHold == null) ? 0.45 : this.hpHold; if (this.hpHold > 0) this.hpHold -= 1 / 60; else { this.hpTrail = Math.max(hpK, this.hpTrail - 0.9 / 60); if (this.hpTrail <= hpK) this.hpHold = null; } }
+  const low = hpK < 0.3 && Math.sin(S.time * 8) > 0;
+  bar(y0 + 6, 18, hpK, low ? '#ff7a86' : hpK < 0.3 ? '#ff5a6a' : '#7fe07a', `${Math.ceil(G.hp)} / ${maxHp()}`, false, this.hpTrail);
   this.woofFlashT = (UI.woofFlash -= 1 / 60);
   bar(y0 + 32, 13, G.mp / maxMp(), '#5fb8ff', '', UI.woofFlash > 0 && Math.floor(UI.woofFlash * 10) % 2 === 0);
   bar(y0 + 52, 6, G.xp / xpNeed(G.lv), '#ffd84d');
