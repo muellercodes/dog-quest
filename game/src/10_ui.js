@@ -516,7 +516,7 @@ UI.updateTouch = function () {
 const HUD = { portrait: null, pkey: '' };
 HUD.draw = function (c) {
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (!this.satT || --this.satT <= 0) { this.satT = 90; this.sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0; }
+  if (!this.satT || --this.satT <= 0) { this.satT = 90; this.touchy = document.body.classList.contains('touchy'); this.sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0; }
   const top = 10 + this.sat;
   // portrait and bars
   const key = G.hero.breed + (G.eq.head || '');
@@ -528,6 +528,7 @@ HUD.draw = function (c) {
   c.fillStyle = OUT; c.font = '700 14px Fredoka, ui-rounded, sans-serif'; c.textAlign = 'center'; c.fillText('Lv ' + G.lv, x0 + 32, y0 + 65);
   const bw = Math.min(230, SW * 0.42), bx = x0 + 70;
   const bar = (y, h, k, col, label, flash, trail) => {
+    k = clamp(k || 0, 0, 1); if (trail != null) trail = clamp(trail, 0, 1);
     c.fillStyle = OUT; c.beginPath(); rrect(c, bx - 3, y - 3, bw + 6, h + 6, (h + 6) / 2); c.fill();
     c.fillStyle = '#5a3a52'; c.beginPath(); rrect(c, bx, y, bw, h, h / 2); c.fill();
     c.fillStyle = 'rgba(30,14,28,0.35)'; c.beginPath(); rrect(c, bx + 2, y + 1, bw - 4, h * 0.35, h * 0.17); c.fill();
@@ -595,10 +596,35 @@ HUD.draw = function (c) {
   // boss health
   const B = Bosses.current;
   if (B && B.hp > 0 && S.scene === 'dungeon') {
-    const w = Math.min(560, SW - 40), x = SW / 2 - w / 2, y = SH - (document.body.classList.contains('touchy') ? 290 : 104);
-    c.font = '700 18px Fredoka, ui-rounded, sans-serif'; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = OUT; c.strokeText(B.name, SW / 2, y - 8); c.fillStyle = '#fff'; c.fillText(B.name, SW / 2, y - 8);
+    const w = Math.min(560, SW - 40), x = SW / 2 - w / 2, y = SH - (this.touchy ? 290 : 104), k = B.hp / B.maxHp;
+    if (this.bossB !== B) { this.bossB = B; this.bossTrail = k; this.bossCard = 0; }
+    this.bossTrail = Math.max(k, (this.bossTrail || k) - 0.35 / 60);
+    c.font = '700 18px Fredoka, ui-rounded, sans-serif'; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = OUT; c.strokeText(B.name, SW / 2, y - 8); c.fillStyle = B.enraged ? '#ffb3b3' : '#fff'; c.fillText(B.name, SW / 2, y - 8);
     c.fillStyle = OUT; c.beginPath(); rrect(c, x - 3, y - 3, w + 6, 22, 11); c.fill();
-    c.fillStyle = '#e8475f'; c.beginPath(); rrect(c, x, y, Math.max(16, w * B.hp / B.maxHp), 16, 8); c.fill();
+    c.fillStyle = '#5a3a52'; c.beginPath(); rrect(c, x, y, w, 16, 8); c.fill();
+    c.fillStyle = '#ffe9a8'; c.beginPath(); rrect(c, x, y, Math.max(16, w * this.bossTrail), 16, 8); c.fill();
+    const bw2 = Math.max(16, w * k);
+    c.fillStyle = B.enraged ? '#ff4a5e' : '#e8475f'; c.beginPath(); rrect(c, x, y, bw2, 16, 8); c.fill();
+    c.save(); c.beginPath(); rrect(c, x, y, bw2, 16, 8); c.clip(); c.fillStyle = 'rgba(40,20,60,0.25)'; c.fillRect(x, y + 10, bw2, 8); c.fillStyle = 'rgba(255,255,255,0.35)'; c.fillRect(x + 6, y + 2, bw2 - 12, 4); c.restore();
+    // quarter notches
+    c.fillStyle = 'rgba(59,34,53,0.55)'; for (let q = 1; q < 4; q++) c.fillRect(x + (w * q) / 4 - 1, y, 2, 16);
+    // a paw badge at the left end
+    c.fillStyle = '#ffd84d'; circ(c, x - 4, y + 8, 15); c.fill(); c.lineWidth = 3.5; c.strokeStyle = OUT; c.stroke();
+    c.fillStyle = OUT; circ(c, x - 4, y + 11, 5); c.fill(); for (let q = 0; q < 4; q++) { circ(c, x - 4 + (q - 1.5) * 4.2, y + 3.5 - (q === 1 || q === 2 ? 2 : 0), 2); c.fill(); }
+    // the name card slides in when the fight begins
+    if (Game.state === 'play' && !Dialog.open && this.bossCard < 2.8) this.bossCard += 1 / 60;
+    const ct = this.bossCard;
+    if (ct > 0 && ct < 2.8) {
+      const inK = easeOut(clamp(ct / 0.35, 0, 1)), outK = clamp((ct - 2.4) / 0.4, 0, 1), cy = SH * 0.32, bh = 86;
+      const off = (1 - inK) * -SW + outK * SW;
+      c.save(); c.translate(off, 0);
+      c.fillStyle = 'rgba(59,34,53,0.92)'; c.beginPath(); c.moveTo(0, cy - bh / 2 + 10); c.lineTo(SW, cy - bh / 2 - 10); c.lineTo(SW, cy + bh / 2 - 10); c.lineTo(0, cy + bh / 2 + 10); c.closePath(); c.fill();
+      c.fillStyle = '#e8475f'; c.fillRect(0, cy + bh / 2 - 4, SW, 5); c.fillStyle = '#ffd84d'; c.fillRect(0, cy - bh / 2 - 2, SW, 4);
+      const parts = B.name.split(/, | the /), main = parts[0], sub = B.name.slice(main.length).replace(/^, /, '').replace(/^ /, '') || ('Level ' + B.lv + ' boss');
+      c.textAlign = 'center'; c.font = `700 ${Math.min(46, SW / 12)}px Fredoka, ui-rounded, sans-serif`; c.lineWidth = 7; c.strokeStyle = OUT; c.strokeText(main.toUpperCase(), SW / 2, cy + 8); c.fillStyle = '#ffd84d'; c.fillText(main.toUpperCase(), SW / 2, cy + 8);
+      c.font = '600 17px Fredoka, ui-rounded, sans-serif'; c.lineWidth = 4; c.strokeText(sub, SW / 2, cy + 32); c.fillStyle = '#fff'; c.fillText(sub, SW / 2, cy + 32);
+      c.restore();
+    }
   }
   // a red edge when hurt badly
   if (G.hp < maxHp() * 0.25 && G.hp > 0) { const a = 0.25 + Math.sin(S.time * 6) * 0.1; const gr = c.createRadialGradient(SW / 2, SH / 2, Math.min(SW, SH) * 0.4, SW / 2, SH / 2, Math.max(SW, SH) * 0.75); gr.addColorStop(0, 'rgba(232,71,95,0)'); gr.addColorStop(1, `rgba(232,71,95,${a})`); c.fillStyle = gr; c.fillRect(0, 0, SW, SH); }
