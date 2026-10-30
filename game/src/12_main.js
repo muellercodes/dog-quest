@@ -146,7 +146,7 @@ function updateCamera(dt) {
     const inHall = P.x < R.x || P.x > R.x + R.w;
     if (!inHall) {
       Cam.x = R.w + 80 > vw ? clamp(Cam.x, R.x - 40 + vw / 2, R.x + R.w + 40 - vw / 2) : lerp(Cam.x, R.x + R.w / 2, k);
-      Cam.y = R.h + 80 > vh ? clamp(Cam.y, R.y - 30 + vh / 2, R.y + R.h + 30 - vh / 2) : lerp(Cam.y, R.y + R.h / 2, k);
+      Cam.y = R.h + 80 + WEX > vh ? clamp(Cam.y, R.y - 30 - WEX + vh / 2, R.y + R.h + 30 - vh / 2) : lerp(Cam.y, R.y + R.h / 2 - WEX / 2, k);
     }
   }
   if (S.scene === 'world') { const vw = SW / Cam.z / 2, vh = SH / Cam.z / 2; Cam.x = clamp(Cam.x, vw, WW - vw); Cam.y = clamp(Cam.y, vh, WH - vh); }
@@ -231,6 +231,7 @@ Game.render = function (dt) {
     else if (it.pk) drawPick(c, it.pk);
     else if (it.draw) it.draw(c);
   }
+  if (S.scene === 'dungeon' && Game.state !== 'title') Dungeon.drawLight(c);
   if (Game.state !== 'title' && G) {
     // Squeaky floats along behind the hero
     const sq = this.sq, k = Math.min(1, dt * 4);
