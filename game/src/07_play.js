@@ -40,7 +40,7 @@ function giveXp(n) {
     Sfx.play('level');
     fxBurst(P.x, P.y - 20, '#ffd84d', 24, 260);
     fxRing(P.x, P.y - 10, '#ffd84d', 90);
-    S.fx.push({ k: 'rays', x: P.x, y: P.y - 18, t: 0, life: 1.4, r: 120 });
+    if (!S.fx.some(f => f.k === 'rays')) S.fx.push({ k: 'rays', x: P.x, y: P.y - 18, t: 0, life: 1.4, r: 120 });
   }
 }
 function giveGold(n) { G.gold += Math.round(n); }
@@ -174,6 +174,7 @@ function foeDie(f) {
   f.hp = 0; f.dead = 0.0001;
   fxPuff(f.x, f.y - 10, 9);
   fxBurst(f.x, f.y - 14, '#ffd84d', 6, 160);
+  for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + rand(-1.3, 1.3); S.fx.push({ k: 'sparkle', x: f.x, y: f.y - 20, vx: Math.cos(a) * rand(70, 130), vy: Math.sin(a) * rand(70, 130), g: 160, t: 0, life: rand(0.5, 0.8), col: pick(['#ffd84d', '#ffffff', '#ffb3c7']) }); }
   if (f.boss) return Bosses.defeated(f);
   const xp = f.xp, gold = f.gold;
   giveXp(xp);
@@ -445,13 +446,17 @@ function updateFx(dt) {
   }
   for (let i = S.nums.length - 1; i >= 0; i--) { const n = S.nums[i]; n.t += dt; n.y -= 34 * dt; if (n.t > 0.9) S.nums.splice(i, 1); }
 }
+function puffR(f) { const p = clamp(f.t / f.life, 0, 1); return f.r * (p < 0.55 ? 0.55 + 0.75 * easeOut(p / 0.55) : 1.3 * (1 - (p - 0.55) / 0.45)); }
 function drawFx(c) {
+  // cartoon smoke: one ink outline around the whole cluster, then the cream puffs on top
+  c.fillStyle = OUT;
+  for (const f of S.fx) if (f.k === 'puff' && f.t >= 0) { const r = puffR(f); if (r > 0.5) { circ(c, f.x, f.y, r + 2.2); c.fill(); } }
   for (const f of S.fx) {
     const p = clamp(f.t / f.life, 0, 1);
     if (f.t < 0) { if (f.k === 'beam') { c.fillStyle = 'rgba(185,168,255,0.25)'; circ(c, f.x, f.y, 26 * (1 + f.t * 2)); c.fill(); } continue; }
     switch (f.k) {
       case 'dot': c.globalAlpha = 1 - p; c.fillStyle = f.col; circ(c, f.x, f.y, f.r * (1 - p * 0.5)); c.fill(); c.globalAlpha = 1; break;
-      case 'puff': c.globalAlpha = 0.7 * (1 - p); c.fillStyle = '#f4efe6'; circ(c, f.x, f.y, f.r * (0.6 + p * 0.8)); c.fill(); c.globalAlpha = 1; break;
+      case 'puff': { const r = puffR(f); if (r > 0.5) { c.fillStyle = '#ddd3e2'; circ(c, f.x, f.y, r); c.fill(); c.fillStyle = '#f7f1e8'; circ(c, f.x - r * 0.14, f.y - r * 0.16, r * 0.8); c.fill(); c.fillStyle = '#ffffff'; circ(c, f.x - r * 0.3, f.y - r * 0.32, r * 0.3); c.fill(); } break; }
       case 'ring': c.globalAlpha = 1 - p; c.strokeStyle = f.col; c.lineWidth = 4 * (1 - p) + 1; circ(c, f.x, f.y, f.r * easeOut(p)); c.stroke(); c.globalAlpha = 1; break;
       case 'slash': {
         // a sweeping crescent that grows along the swing, then fades
@@ -483,12 +488,12 @@ function drawFx(c) {
         c.save(); c.translate(P.x, P.y - 18); c.globalCompositeOperation = 'lighter';
         for (let i = 0; i < 12; i++) {
           const an = (i / 12) * TAU + f.t * 0.8, w = 0.12, R = f.r * (0.7 + 0.3 * Math.sin(i * 2.1 + f.t * 4));
-          c.globalAlpha = k * (i % 2 ? 0.35 : 0.55);
+          c.globalAlpha = k * (i % 2 ? 0.14 : 0.24);
           const g = c.createLinearGradient(0, 0, Math.cos(an) * R, Math.sin(an) * R);
           g.addColorStop(0, 'rgba(255,240,170,1)'); g.addColorStop(1, 'rgba(255,216,77,0)');
           c.fillStyle = g; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, an - w, an + w); c.closePath(); c.fill();
         }
-        c.globalAlpha = k * 0.6; glow(c, 0, 0, 46, '#fff2b0', 1);
+        c.globalAlpha = k * 0.35; glow(c, 0, 0, 40, '#fff2b0', 1);
         c.restore(); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; break;
       }
       case 'dust': { c.globalAlpha = 0.55 * (1 - p); c.fillStyle = f.col || '#e9dcc0'; circ(c, f.x, f.y, f.r * (0.5 + p * 0.9)); c.fill(); c.globalAlpha = 1; break; }
