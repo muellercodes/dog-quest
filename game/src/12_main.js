@@ -238,11 +238,7 @@ function drawProp(c, p) {
 function drawDocks(c, v) {
   for (const dk of [World.dock, World.dock2]) {
     if (!dk || dk.x < v.x0 - 300 || dk.x > v.x1 + 300 || dk.y < v.y0 - 100 || dk.y > v.y1 + 100) continue;
-    const dir = dk.to === 'isle' ? 1 : -1;
-    c.fillStyle = '#b88752'; c.strokeStyle = OUT; c.lineWidth = 2.5;
-    c.beginPath(); rrect(c, dir > 0 ? dk.x - 20 : dk.x - 150, dk.y - 18, 170, 36, 6); c.fill(); c.stroke();
-    c.strokeStyle = '#94683d'; c.lineWidth = 1.6;
-    for (let i = 0; i < 9; i++) { const x = (dir > 0 ? dk.x - 20 : dk.x - 150) + 10 + i * 18; c.beginPath(); c.moveTo(x, dk.y - 16); c.lineTo(x, dk.y + 16); c.stroke(); }
+    drawDock(c, dk, S.time); // ART-WORLD
   }
 }
 

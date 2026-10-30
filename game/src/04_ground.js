@@ -33,7 +33,9 @@ Ground.prep = function () {
   // per biome palettes as rgb
   this.CL = BIOME_IDS.map((id) => { const h = CLIFF[id]; return { top: hexRgb(lightTone(h, 0.42)), mid: hexRgb(h), low: hexRgb(shadeTone(h, 0.3)), base: hexRgb(shadeTone(h, 0.52)) }; });
   this.DK = BIOME_IDS.map((id) => hexRgb(shadeTone(BIOMES[id].dark, 0.22)));
-  this.AMP = BIOME_IDS.map((id) => ({ meadow: 10, forest: 10, plains: 10, coast: 9, snow: 13, desert: 9, spooky: 9, isle: 8 }[id]));
+  this.AMP = BIOME_IDS.map((id) => ({ meadow: 10, forest: 10, plains: 10, coast: 9, snow: 9, desert: 9, spooky: 9, isle: 8 }[id]));
+  const TL = { snow: [0.6, 0.8, 1], desert: [0.9, 0.85, 0.55], spooky: [0.9, 0.85, 1], isle: [1, 0.85, 0.9] }, TD = { snow: [1.5, 1, 0.3], desert: [0.55, 0.95, 1.35], spooky: [1, 1.15, 0.6], isle: [0.75, 1.15, 0.85] };
+  this.TL = BIOME_IDS.map((id) => TL[id] || [0.85, 1, 0.45]); this.TD = BIOME_IDS.map((id) => TD[id] || [0.85, 1, 0.95]);
   // a tileable brush texture: soft diagonal dabs, light and dark
   const N = 300, c = mkCanvas(N, N), g = c.getContext('2d');
   g.fillStyle = '#808080'; g.fillRect(0, 0, N, N);
@@ -70,7 +72,7 @@ Ground.prep = function () {
 Ground.field = function (x0, y0) {
   const img = this.fieldImg, d = img.data;
   const F = World.F, FE = World.FE, TS = World.TS, CR = World.CR, CG = World.CG, CB = World.CB, BI = World.BI;
-  const WL = this.WL, MT = this.MT, MN = this.MTN, CL = this.CL, DK = this.DK, AMP = this.AMP;
+  const WL = this.WL, MT = this.MT, MN = this.MTN, CL = this.CL, DK = this.DK, AMP = this.AMP, TLs = this.TL, TDs = this.TD;
   for (let py = 0; py < FPX; py++) {
     const wy = y0 + (py - 1 + 0.5) * FLD;
     const gy = clamp(wy / GS, 0, GH - 1.001), j = gy | 0, fy = gy - j;
@@ -92,8 +94,8 @@ Ground.field = function (x0, y0) {
         b = CB[k] * w1 + CB[k2] * w2 + CB[k3] * w3 + CB[k4] * w4;
         const ts = TS[k] * w1 + TS[k2] * w2 + TS[k3] * w3 + TS[k4] * w4;
         if (ts > 0.02) { const s = Math.min(0.42, ts * 0.36), D = DK[bi]; r += (D[0] - r) * s; gg += (D[1] - gg) * s; b += (D[2] - b) * s; }
-        const v = mt * AMP[bi];
-        r += v * 0.85; gg += v; b += v * (mt > 0 ? 0.45 : 0.95);
+        const v = mt * AMP[bi], tn = mt > 0 ? TLs[bi] : TDs[bi];
+        r += v * tn[0]; gg += v * tn[1]; b += v * tn[2];
         if (f < 0.075) {
           const dx = ((F[k2] - F[k]) * (1 - fy) + (F[k4] - F[k3]) * fy), dy = ((F[k3] - F[k]) * (1 - fx) + (F[k4] - F[k2]) * fx);
           const ny = dy / (Math.hypot(dx, dy) || 1);       // > 0: the land rises to the south, the sea is north (a beach)
@@ -150,21 +152,27 @@ Ground.field = function (x0, y0) {
   return this.fieldCv;
 };
 
-Ground.render = function (cx, cy) {
-  if (!this.prepped) this.prep();
+// a chunk is baked in three stages so the work can be spread over frames
+Ground.job = function (cx, cy) { if (!this.prepped) this.prep(); return { cx, cy, x0: cx * CHW, y0: cy * CHW, stage: 0, cv: null, g: null }; };
+Ground.step = function (j) {
   const t0 = performance.now();
-  const x0 = cx * CHW, y0 = cy * CHW;
-  const c = mkCanvas(CHW, CHW), g = c.getContext('2d');
-  g.imageSmoothingEnabled = true;
-  g.drawImage(this.field(x0, y0), -FLD, -FLD, FPX * FLD, FPX * FLD);
-  g.translate(-x0, -y0);
-  g.lineJoin = 'round'; g.lineCap = 'round';
-  this.paintCliffs(g, x0, y0);
-  this.paintLand(g, x0, y0);
-  this.paintRoads(g, x0, y0);
-  this.paintPlazas(g, x0, y0);
+  if (j.stage === 0) {
+    j.cv = mkCanvas(CHW, CHW); j.g = j.cv.getContext('2d');
+    j.g.imageSmoothingEnabled = true;
+    j.g.drawImage(this.field(j.x0, j.y0), -FLD, -FLD, FPX * FLD, FPX * FLD);
+    j.g.translate(-j.x0, -j.y0); j.g.lineJoin = 'round'; j.g.lineCap = 'round';
+  } else if (j.stage === 1) { this.paintCliffs(j.g, j.x0, j.y0); this.paintLand(j.g, j.x0, j.y0); }
+  else { this.paintRoads(j.g, j.x0, j.y0); this.paintPlazas(j.g, j.x0, j.y0); }
+  j.stage++;
+  this.bakeMs = (this.bakeMs || 0) + performance.now() - t0;
+  return j.stage >= 3;
+};
+Ground.render = function (cx, cy) {
+  const t0 = performance.now();
+  const j = this.job(cx, cy);
+  while (!this.step(j));
   this.lastBake = performance.now() - t0;
-  return c;
+  return j.cv;
 };
 
 // append a tapered stroke (thin ends, full in the middle) to a path
@@ -272,10 +280,9 @@ Ground.paintLand = function (g, x0, y0) {
         }
         if ((b === 'meadow' || b === 'plains' || b === 'forest') && h4 > 0.985 && h1 < 0.5) leaves.push([x, y, h1, h2, 0, null]);
         if (b !== 'spooky' && b !== 'coast' && h3 > 0.9975 && f > 0.12 && ts < 0.2) puddles.push([x, y, h1]);
-        if (b === 'spooky' && h4 < 0.035) mists.push([x, y, h1]);
       } else if (b === 'snow') {
         if (h3 < 0.16) stars.push([x, y, h1]);
-        if (h4 > 0.82 && dn > 0.42) { const w = 14 + h1 * 22; taperTo(P('drift'), [[x - w, y], [x - w * 0.5, y - 3 - h2 * 2], [x, y - 1], [x + w * 0.5, y + 1.5], [x + w, y]], 3.2); }
+        if (h4 > 0.8 && dn > 0.38) { const w = 16 + h1 * 24, pts = [[x - w, y], [x - w * 0.5, y - 3 - h2 * 2], [x, y - 1], [x + w * 0.5, y + 1.5], [x + w, y]]; taperTo(P('drift'), pts, 5); taperTo(P('driftl'), pts.map(([a, c2]) => [a - 1, c2 - 3]), 2.4); }
         if (h3 > 0.9 && ts > 0.1) taperTo(P('drift'), [[x - 8, y], [x, y - 2], [x + 9, y]], 2.4);
       } else if (b === 'desert') {
         if (h3 < 0.3 + dn * 0.3 && ((iy + ix) % 2 === 0)) {
@@ -315,7 +322,15 @@ Ground.paintLand = function (g, x0, y0) {
     g.fillStyle = '#a9e6f2'; ell(g, x - rx * 0.15, y - ry * 0.2, rx * 0.7, ry * 0.55); g.fill();
     g.fillStyle = 'rgba(255,255,255,0.8)'; ell(g, x - rx * 0.4, y - ry * 0.3, rx * 0.22, ry * 0.18); g.fill();
   }
-  for (const [x, y, h] of mists) { const s = 70 + h * 80; g.globalAlpha = 0.55; g.drawImage(this.mist, x - s, y - s * 0.45, s * 2, s * 0.9); g.globalAlpha = 1; }
+  const MS = 60;
+  for (let iy = Math.floor((y0 - 90) / MS); iy <= Math.ceil((y0 + CHW + 90) / MS); iy++)
+    for (let ix = Math.floor((x0 - 160) / MS); ix <= Math.ceil((x0 + CHW + 160) / MS); ix++) {
+      const h = hash2(ix, iy, 211);
+      if (h > 0.22) continue;
+      const x = (ix + hash2(ix, iy, 212)) * MS, y = (iy + hash2(ix, iy, 213)) * MS;
+      if (World.biomeAt(x, y) === 'spooky' && World.Fat(x, y) > 0.04) mists.push([x, y, h / 0.22]);
+    }
+  for (const [x, y, h] of mists) { const s = 70 + h * 80; g.globalAlpha = 0.38; g.drawImage(this.mist, x - s, y - s * 0.45, s * 2, s * 0.9); g.globalAlpha = 1; }
   const fillP = (key, col) => { if (paths[key]) { g.fillStyle = col; g.fill(paths[key]); } };
   for (const b of BIOME_IDS) {
     const B = BIOMES[b];
@@ -323,7 +338,7 @@ Ground.paintLand = function (g, x0, y0) {
     fillP('gl:' + b, b === 'spooky' ? 'rgba(186,176,214,0.4)' : hexA(lightTone(B.g, 0.35), 0.55));
     fillP('clover:' + b, hexA(shadeTone(B.g2, 0.1), 0.45));
   }
-  fillP('drift', 'rgba(150,176,214,0.45)');
+  fillP('drift', 'rgba(140,164,214,0.32)'); fillP('driftl', 'rgba(255,255,255,0.9)');
   fillP('rip', 'rgba(196,140,70,0.38)'); fillP('ripl', 'rgba(255,240,200,0.5)');
   fillP('knitd', 'rgba(150,84,120,0.16)'); fillP('knitl', 'rgba(255,230,240,0.2)');
   // fallen autumn leaves
@@ -340,7 +355,7 @@ Ground.paintLand = function (g, x0, y0) {
   if (stars.length) {
     const sp = new Path2D();
     for (const [x, y, h] of stars) { const r = 1.6 + h * 2; sp.moveTo(x, y - r * 1.6); sp.quadraticCurveTo(x, y, x + r, y); sp.quadraticCurveTo(x, y, x, y + r * 1.6); sp.quadraticCurveTo(x, y, x - r, y); sp.quadraticCurveTo(x, y, x, y - r * 1.6); }
-    g.fillStyle = 'rgba(255,255,255,0.9)'; g.fill(sp);
+    g.fillStyle = 'rgba(150,186,236,0.8)'; g.fill(sp);
   }
 };
 function hexA(h, a) { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; }
@@ -475,14 +490,19 @@ Ground.get = function (cx, cy, force) {
   let c = this.cache.get(key);
   if (c) { c.used = this.frame; return c; }
   if (!force) return null;
-  c = { cv: this.render(cx, cy), used: this.frame };
+  const J = this.pend;
+  if (J && J.cx === cx && J.cy === cy) { while (!this.step(J)); this.pend = null; c = { cv: J.cv, used: this.frame }; }
+  else c = { cv: this.render(cx, cy), used: this.frame };
+  this.put(key, c);
+  return c;
+};
+Ground.put = function (key, c) {
   this.cache.set(key, c);
   if (this.cache.size > 46) {
     let oldK = null, old = 1e12;
     for (const [k, v] of this.cache) if (v.used < old) { old = v.used; oldK = k; }
     this.cache.delete(oldK);
   }
-  return c;
 };
 
 // view rect in world space
@@ -503,20 +523,23 @@ Ground.draw = function (c, t) {
     if (cx < 0 || cy < 0 || cx * CHW >= WW || cy * CHW >= WH) continue;
     // chunks on screen are always drawn; at most a couple of new ones per frame
     let ch = this.get(cx, cy, false);
-    if (!ch && (made < 2 || !this.started)) { ch = this.get(cx, cy, true); made++; }
+    if (!ch && (made < 1 || !this.started)) { ch = this.get(cx, cy, true); made++; }
     if (ch) c.drawImage(ch.cv, cx * CHW - 0.5, cy * CHW - 0.5, CHW + 1, CHW + 1);
   }
   this.started = true;
-  // warm the ring around the view while there is time (one chunk every few frames)
-  if (made === 0 && this.frame % 3 === 0) {
-    const mx = (Cam.x / CHW) | 0, my = (Cam.y / CHW) | 0;
-    let best = null, bd = 1e9;
-    for (let cy = cy0 - 1; cy <= cy1 + 1; cy++) for (let cx = cx0 - 1; cx <= cx1 + 1; cx++) {
-      if (cx < 0 || cy < 0 || cx * CHW >= WW || cy * CHW >= WH || this.cache.has(cy * 1000 + cx)) continue;
-      const d = Math.abs(cx - mx) + Math.abs(cy - my);
-      if (d < bd) { bd = d; best = [cx, cy]; }
+  // warm the ring around the view while there is time: one stage of one chunk per frame
+  if (made === 0) {
+    if (!this.pend) {
+      const mx = Cam.x / CHW - 0.5, my = Cam.y / CHW - 0.5;
+      let best = null, bd = 1e9;
+      for (let cy = cy0 - 1; cy <= cy1 + 1; cy++) for (let cx = cx0 - 1; cx <= cx1 + 1; cx++) {
+        if (cx < 0 || cy < 0 || cx * CHW >= WW || cy * CHW >= WH || this.cache.has(cy * 1000 + cx)) continue;
+        const d = Math.abs(cx - mx) + Math.abs(cy - my);
+        if (d < bd) { bd = d; best = [cx, cy]; }
+      }
+      if (best) this.pend = this.job(best[0], best[1]);
     }
-    if (best) this.get(best[0], best[1], true);
+    if (this.pend && this.step(this.pend)) { const J = this.pend; this.pend = null; this.put(J.cy * 1000 + J.cx, { cv: J.cv, used: this.frame }); }
   }
   this.drawSurf(c, v, t);
   this.drawWaves(c, v, t, dt);
@@ -628,4 +651,40 @@ Clouds.draw = function (c, dt) {
     c.drawImage(this.spr, k.x, k.y, 420 * k.s, 260 * k.s);
   }
   c.globalAlpha = 1;
+  Atmos.draw(c, dt);
 };
+
+// ---------- the wooden docks at Fetchwick and Mittens Landing (same footprint as before)
+function drawDock(c, dk, t) {
+  const dir = dk.to === 'isle' ? 1 : -1, x0 = dir > 0 ? dk.x - 20 : dk.x - 150, y0 = dk.y - 18, W = 170, H = 36, side = 6;
+  // shadow on the water, posts with ripples
+  c.fillStyle = 'rgba(30,40,110,0.22)'; c.beginPath(); rrect(c, x0 + 8, y0 + 12, W, H, 6); c.fill();
+  const posts = [];
+  for (let i = 0; i <= 4; i++) posts.push(x0 + 10 + i * ((W - 20) / 4));
+  for (const px of posts) for (const py of [y0 + 4, y0 + H + side - 2]) {
+    const r = 9 + Math.sin(t * 2 + px * 0.1 + py) * 1.5;
+    c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1.6; c.beginPath(); c.ellipse(px, py + 9, r, r * 0.35, 0, 0, TAU); c.stroke();
+    c.fillStyle = OUT; c.beginPath(); rrect(c, px - 4.5, py - 4, 9, 14, 3); c.fill();
+    c.fillStyle = '#7b5236'; c.beginPath(); rrect(c, px - 3, py - 3, 6, 11.5, 2); c.fill();
+    c.fillStyle = '#9a6a45'; c.fillRect(px - 3, py - 3, 2.4, 11);
+  }
+  // deck: inked outline, a darker side face, planks
+  c.fillStyle = OUT; c.beginPath(); rrect(c, x0 - 2.5, y0 - 2.5, W + 5, H + side + 5, 7); c.fill();
+  c.fillStyle = '#8a5a38'; c.beginPath(); rrect(c, x0, y0 + 4, W, H + side - 4, 5); c.fill();
+  c.fillStyle = '#c4935e'; c.beginPath(); rrect(c, x0, y0, W, H, 5); c.fill();
+  const n = 11, pw = W / n;
+  for (let i = 0; i < n; i++) {
+    const h = hash2(i, dk.x | 0, 3), px = x0 + i * pw;
+    c.fillStyle = h < 0.33 ? '#b9875a' : h < 0.66 ? '#cc9c66' : '#d3a670';
+    c.fillRect(px + 1, y0 + 1, pw - 2, H - 2);
+    c.fillStyle = 'rgba(255,240,210,0.35)'; c.fillRect(px + 1.5, y0 + 2, pw - 3, 3);
+    c.fillStyle = 'rgba(70,40,40,0.3)'; c.fillRect(px + pw - 2.5, y0 + 1, 1.5, H - 2);
+    c.fillStyle = '#6b4a3a'; circ(c, px + pw / 2, y0 + 6, 1); c.fill(); circ(c, px + pw / 2, y0 + H - 6, 1); c.fill();
+  }
+  c.fillStyle = 'rgba(80,40,50,0.25)'; c.fillRect(x0, y0 + H - 6, W, 6);
+  // a coil of rope on the end
+  const rx = dir > 0 ? x0 + W - 22 : x0 + 22, ry = y0 + H / 2;
+  c.strokeStyle = OUT; c.lineWidth = 6; c.beginPath(); c.ellipse(rx, ry, 9, 6, 0, 0, TAU); c.stroke();
+  c.strokeStyle = '#e8d2a0'; c.lineWidth = 3.4; c.beginPath(); c.ellipse(rx, ry, 9, 6, 0, 0, TAU); c.stroke();
+  c.strokeStyle = '#c4a46e'; c.lineWidth = 1.2; c.beginPath(); c.ellipse(rx, ry, 5, 3.2, 0, 0, TAU); c.stroke();
+}
