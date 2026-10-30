@@ -408,8 +408,9 @@ const PropArt = {
     g.restore();
     // scree and boulders at the foot
     const rng = mulberry32(v * 13 + 5);
+    const heaps = [[-96, 4], [-30, 8], [58, 6], [104, 3]];
     for (let i = 0; i < 9; i++) {
-      const x = -110 + rng() * 220, y = 2 + rng() * 7, r = 3 + rng() * 5;
+      const hp = heaps[i % 4], r = i < 4 ? 5.5 + rng() * 3 : 2.4 + rng() * 2.4, x = hp[0] + (rng() - 0.5) * 26, y = hp[1] + rng() * 4 + (i < 4 ? 0 : 3);
       const S = (q) => { q.moveTo(x - r, y); q.quadraticCurveTo(x - r, y - r * 1.1, x, y - r * 1.1); q.quadraticCurveTo(x + r * 1.1, y - r, x + r, y); q.closePath(); };
       inkSil(g, S, 1.3); cel(g, S, '#a1a9c4', { s: 1.6 });
     }
@@ -598,7 +599,9 @@ function propSprite(p, b) {
 
 // ---------- life: wind sway and glows, applied when drawing
 function windK(x, y, t) { return Math.sin(t * 1.3 + x * 0.011 + y * 0.004) * 0.6 + Math.sin(t * 2.3 + x * 0.027 - y * 0.013) * 0.22 + Math.sin(t * 0.41 + x * 0.002) * 0.3; }
-const SWAY = { tree: 0.03, pine: 0.022, palm: 0.045, dead: 0.012, bush: 0.035, cactus: 0.006 };
+const SWAY = { tree: 0.032, pine: 0.024, palm: 0.045, bush: 0.04 };
+// bend lines (sprite-local y): each band above a line leans a little further, axis-aligned draws only (cheap everywhere)
+const BENDS = { tree: [-60, -44, -28], pine: [-44, -22], palm: [-60, -36], bush: [-14] };
 const _glows = {};
 function glowSprite(col) {
   if (_glows[col]) return _glows[col];
@@ -616,11 +619,15 @@ function drawGlow(c, x, y, r, col, a) {
 }
 function drawPropSprite(c, p, s) {
   const t = S.time, amp = SWAY[p.kind], sc = p.s || 1;
-  if (amp) {
-    const k = windK(p.x, p.y, t) * amp;
-    c.save(); c.translate(p.x, p.y); c.transform(1, 0, -k, 1, 0, 0);
-    c.drawImage(s.c, -s.ox * sc, -s.oy * sc, s.w * sc, s.h * sc);
-    c.restore();
+  if (amp && c.globalAlpha === 1) {
+    const k = windK(p.x, p.y, t) * amp, B = BENDS[p.kind], X = p.x - s.ox * sc, Y = p.y - s.oy * sc, cw = s.c.width, n = B.length;
+    let top = 0;
+    for (let i = 0; i <= n; i++) {
+      const bot = i < n ? Math.round((s.oy + B[i]) * SPR_SC) : s.c.height, dx = i < n ? -k * B[i] * sc : 0;
+      const h = Math.min(s.c.height, bot + (i < n ? 2 : 0)) - top;
+      c.drawImage(s.c, 0, top, cw, h, X + dx, Y + (top / SPR_SC) * sc, s.w * sc, (h / SPR_SC) * sc);
+      top = bot;
+    }
   } else drawSprite(c, s, p.x, p.y, sc);
   // glowing things
   const ph = Math.sin(t * 2.2 + p.x * 0.05);

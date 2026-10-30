@@ -36,6 +36,7 @@ Ground.prep = function () {
   this.AMP = BIOME_IDS.map((id) => ({ meadow: 10, forest: 10, plains: 10, coast: 9, snow: 9, desert: 9, spooky: 9, isle: 8 }[id]));
   const TL = { snow: [0.6, 0.8, 1], desert: [0.9, 0.85, 0.55], spooky: [0.9, 0.85, 1], isle: [1, 0.85, 0.9] }, TD = { snow: [1.5, 1, 0.3], desert: [0.55, 0.95, 1.35], spooky: [1, 1.15, 0.6], isle: [0.75, 1.15, 0.85] };
   this.TL = BIOME_IDS.map((id) => TL[id] || [0.85, 1, 0.45]); this.TD = BIOME_IDS.map((id) => TD[id] || [0.85, 1, 0.95]);
+  this.DES = BIOME_IDS.indexOf('desert');
   // a tileable brush texture: soft diagonal dabs, light and dark
   const N = 300, c = mkCanvas(N, N), g = c.getContext('2d');
   g.fillStyle = '#808080'; g.fillRect(0, 0, N, N);
@@ -94,6 +95,13 @@ Ground.field = function (x0, y0) {
         b = CB[k] * w1 + CB[k2] * w2 + CB[k3] * w3 + CB[k4] * w4;
         const ts = TS[k] * w1 + TS[k2] * w2 + TS[k3] * w3 + TS[k4] * w4;
         if (ts > 0.02) { const s = Math.min(0.42, ts * 0.36), D = DK[bi]; r += (D[0] - r) * s; gg += (D[1] - gg) * s; b += (D[2] - b) * s; }
+        if (bi === this.DES) {
+          // big soft dunes: a lit face toward the sun, a shaded lee side
+          const ph = wx * 0.0105 + wy * 0.004 + Math.sin(wy * 0.0065 + wx * 0.002) * 2.2;
+          const sd = Math.sin(ph), sc = Math.cos(ph);
+          const lit = sd > 0 ? sd * sd * 9 : 0, lee = sc < -0.55 && sd < 0.2 ? (-sc - 0.55) * 26 : 0;
+          r += lit - lee * 0.75; gg += lit * 0.95 - lee * 0.95; b += lit * 0.7 - lee * 0.8;
+        }
         const v = mt * AMP[bi], tn = mt > 0 ? TLs[bi] : TDs[bi];
         r += v * tn[0]; gg += v * tn[1]; b += v * tn[2];
         if (f < 0.075) {

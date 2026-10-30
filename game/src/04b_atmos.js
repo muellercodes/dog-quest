@@ -4,7 +4,7 @@
 const Atmos = { P: [], n: {}, ready: false, tint: [255, 214, 150, 0.05], tintKey: '', over: null, overKey: '' };
 const ATM_CAP = 112;
 const ATM_TYPE = { meadow: 'leaf', forest: 'leaf', plains: 'leaf', coast: 'mote', snow: 'snow', desert: 'sand', spooky: 'fly', isle: 'petal' };
-const ATM_MAX = { leaf: 26, snow: 80, sand: 22, fly: 18, mist: 6, petal: 30, spray: 20, mote: 12 };
+const ATM_MAX = { leaf: 24, snow: 56, sand: 18, fly: 16, mist: 4, petal: 26, spray: 18, mote: 10 };
 const ATM_GRADE = {
   meadow: [255, 206, 140, 0.06], forest: [150, 210, 150, 0.05], plains: [255, 214, 140, 0.06], coast: [150, 220, 255, 0.05],
   snow: [175, 205, 255, 0.07], desert: [255, 188, 112, 0.07], spooky: [128, 96, 196, 0.09], isle: [255, 172, 214, 0.06],
@@ -34,14 +34,14 @@ Atmos.init = function () {
   const rng = mulberry32(31);
   this.highs = [];
   for (let i = 0; i < 8; i++) this.highs.push({ x: rng() * WW, y: rng() * WH, s: 0.9 + rng() * 0.6, v: 8 + rng() * 6 });
-  this.overCv = mkCanvas(160, 90);
+  this.overCv = mkCanvas(64, 64);
 };
 
 Atmos.spawn = function (v, b) {
   const x = rand(v.x0, v.x1), y = rand(v.y0, v.y1);
   const bm = World.biomeAt(x, y);
   let k = ATM_TYPE[bm] || 'leaf';
-  if (bm === 'spooky' && Math.random() < 0.18) k = 'mist';
+  if (bm === 'spooky' && Math.random() < 0.12) k = 'mist';
   if ((bm === 'meadow' || bm === 'plains') && Math.random() < 0.3) k = 'mote';
   if ((this.n[k] || 0) >= ATM_MAX[k]) return;
   const p = { k, x, y, age: 0, ph: rand(0, TAU) };
@@ -50,7 +50,7 @@ Atmos.spawn = function (v, b) {
     case 'snow': p.life = rand(5, 8); p.vx = rand(6, 16); p.vy = rand(26, 50); p.r = Math.random() < 0.25 ? rand(2.2, 3) : rand(1.1, 1.9); break;
     case 'sand': p.life = rand(1.2, 2.2); p.vx = rand(120, 200); p.vy = rand(-8, 8); p.len = rand(16, 34); break;
     case 'fly': p.life = rand(5, 9); p.dir = rand(0, TAU); p.sp = rand(8, 18); break;
-    case 'mist': p.life = rand(9, 14); p.vx = rand(4, 9); p.s = rand(110, 190); break;
+    case 'mist': p.life = rand(9, 14); p.vx = rand(4, 9); p.s = rand(80, 130); break;
     case 'petal': p.life = rand(4, 7); p.vx = rand(16, 30); p.vy = rand(12, 22); p.spin = rand(-3, 3); p.s = rand(0.8, 1.15); p.img = this.petals[(Math.random() * 3) | 0]; break;
     case 'mote': p.life = rand(3, 6); p.vx = rand(-4, 6); p.vy = rand(-8, -3); p.r = rand(1, 1.8); break;
   }
@@ -150,23 +150,34 @@ Atmos.screen = function (c, dt) {
   for (let i = 0; i < 4; i++) T[i] += (G0[i] - T[i]) * k;
   const key = T.map((q, i) => (i < 3 ? Math.round(q / 6) : Math.round(q * 200))).join(',');
   if (key !== this.overKey) {
+    // one corner of the vignette, tinted by the biome (the middle of the screen is left untouched)
     this.overKey = key;
-    const o = this.overCv, g = o.getContext('2d'), W = o.width, H = o.height;
-    g.clearRect(0, 0, W, H);
-    g.save(); g.translate(W / 2, H / 2); g.scale(W / H, 1);
-    const gr = g.createRadialGradient(0, 0, H * 0.25, 0, 0, H * 0.78);
+    const o = this.overCv, g = o.getContext('2d'), W = o.width;
+    g.clearRect(0, 0, W, W);
+    // the piece covers the lower-right 40% x 45% of the screen; alpha follows the normalised distance from the
+    // screen centre and is zero along the piece's inner edges, so the four mirrored pieces join without seams
     const [r, gg, bb, a] = T.map((q, i) => (i < 3 ? Math.round(q) : q));
-    gr.addColorStop(0, `rgba(${r},${gg},${bb},${(a * 0.6).toFixed(3)})`);
-    gr.addColorStop(0.6, `rgba(${r},${gg},${bb},${a.toFixed(3)})`);
-    gr.addColorStop(1, `rgba(${Math.round(r * 0.3 + 40)},${Math.round(gg * 0.2 + 18)},${Math.round(bb * 0.3 + 50)},${(0.2 + a).toFixed(3)})`);
-    g.fillStyle = gr; g.fillRect(-W, -H, W * 2, H * 2);
-    g.restore();
-    // warm sunlight from the upper left, baked in (no additive pass at runtime)
-    const sun = g.createRadialGradient(W * 0.04, 0, 0, W * 0.04, 0, W * 0.62);
-    sun.addColorStop(0, 'rgba(255,244,206,0.2)'); sun.addColorStop(0.5, 'rgba(255,244,206,0.07)'); sun.addColorStop(1, 'rgba(255,244,206,0)');
-    g.fillStyle = sun; g.fillRect(0, 0, W, H);
+    const img = g.createImageData(W, W), d = img.data, u0 = 1 - 2 * 0.4, v0 = 1 - 2 * 0.45, r0 = 1.03, r1 = 1.42;
+    const dr = Math.round(r * 0.3 + 40), dg = Math.round(gg * 0.2 + 18), db = Math.round(bb * 0.3 + 50);
+    for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
+      const u = u0 + (1 - u0) * (i + 0.5) / W, v = v0 + (1 - v0) * (j + 0.5) / W, rn = Math.sqrt(u * u + v * v);
+      const k = ease(clamp((rn - r0) / (r1 - r0), 0, 1)), o = (j * W + i) * 4;
+      d[o] = lerp(r, dr, k); d[o + 1] = lerp(gg, dg, k); d[o + 2] = lerp(bb, db, k); d[o + 3] = 255 * k * (a * 2 + 0.2);
+    }
+    g.putImageData(img, 0, 0);
+    // and a warm sunlit corner for the upper left
+    if (!this.sunCv) {
+      this.sunCv = mkCanvas(64, 64);
+      const sg = this.sunCv.getContext('2d'), sun = sg.createRadialGradient(0, 0, 0, 0, 0, 64);
+      sun.addColorStop(0, 'rgba(255,244,206,0.22)'); sun.addColorStop(0.55, 'rgba(255,244,206,0.08)'); sun.addColorStop(1, 'rgba(255,244,206,0)');
+      sg.fillStyle = sun; sg.fillRect(0, 0, 64, 64);
+    }
   }
+  const cw = SW * 0.4, ch = SH * 0.45, o = this.overCv;
   c.save(); c.setTransform(DPR, 0, 0, DPR, 0, 0);
-  c.drawImage(this.overCv, 0, 0, SW, SH);
+  c.drawImage(this.sunCv, 0, 0, SW * 0.45, SH * 0.6);
+  c.drawImage(o, SW - cw, SH - ch, cw, ch);
+  c.setTransform(-DPR, 0, 0, DPR, SW * DPR, 0); c.drawImage(o, SW - cw, SH - ch, cw, ch);
+  c.setTransform(DPR, 0, 0, -DPR, 0, SH * DPR); c.drawImage(o, SW - cw, SH - ch, cw, ch);
   c.restore();
 };
