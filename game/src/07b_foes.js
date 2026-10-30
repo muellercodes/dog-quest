@@ -223,8 +223,12 @@ function updateNpcs(dt) {
     n.t += dt; n.wT -= dt; n.move = 0;
     const dP = dist(n.x, n.y, P.x, P.y);
     if (dP < 110) { n.face = P.x > n.x ? 1 : -1; continue; }
-    if (n.def.still) continue;
-    if (n.wT <= 0) { n.wT = rand(2, 5); const a = rand(0, TAU), r = rand(0, 60); n.wx = n.home.x + Math.cos(a) * r; n.wy = n.home.y + Math.sin(a) * r * 0.6; }
+    if (n.def.still) { n.wT <= 0 && (n.wT = rand(5, 10), n.sit = !n.sit && Math.random() < 0.5); continue; }
+    if (n.wT <= 0) {
+      n.wT = rand(2, 5); n.sit = Math.random() < 0.4;
+      if (n.sit) { n.wx = n.x; n.wy = n.y; n.wT = rand(4, 9); }
+      else { const a = rand(0, TAU), r = rand(0, 60); n.wx = n.home.x + Math.cos(a) * r; n.wy = n.home.y + Math.sin(a) * r * 0.6; }
+    }
     const d = dist(n.x, n.y, n.wx, n.wy);
     if (d > 6) { const a = angTo(n.x, n.y, n.wx, n.wy); const nx = n.x + Math.cos(a) * 45 * dt, ny = n.y + Math.sin(a) * 45 * dt; if (!World.blocked(nx, ny, 10, false)) { n.x = nx; n.y = ny; } else n.wT = 0; n.face = Math.cos(a) >= 0 ? 1 : -1; n.move = 0.5; }
     n.bT -= dt;
@@ -235,7 +239,10 @@ function updateNpcs(dt) {
 
 // ---------- drawing a critter of any kind
 function drawFoe(c, f) {
-  const st = { face: f.face, t: f.t, move: f.move || (f.state === 'dash' ? 1 : 0), hurt: f.hurt, sc: f.sc, tele: f.state === 'wind' ? f.st / f.windT : 0, alt: f.hop ? 34 + f.hop : undefined };
+  if (!f.anim) f.anim = newAnim();
+  const st = { face: f.face, t: f.t, anim: f.anim, move: f.move || (f.state === 'dash' ? 1 : 0), run: f.state === 'dash' || (f.state === 'chase' && f.move > 0.9), hurt: f.hurt, sc: f.sc, tele: f.state === 'wind' ? f.st / f.windT : 0, alt: f.hop ? 34 + f.hop : undefined, angry: f.state === 'chase' || f.state === 'wind' || f.state === 'dash', pant: f.state === 'recover' };
+  if (f.hurt > 0.2 && !f.dead) { st.pose = 'hurt'; st.poseT = 1 - f.hurt; }
+  if (f.dead) { st.pose = 'faint'; st.poseT = Math.min(1, f.dead / 0.2); }
   const y = f.y - (f.hop || 0);
   if (f.dead) { c.globalAlpha = 1 - f.dead / 0.35; st.sc = f.sc * (1 + f.dead); }
   if (f.spawnT > 0) c.globalAlpha = 1 - f.spawnT / 0.35;
@@ -248,7 +255,7 @@ function drawFoe(c, f) {
     case 'scorpion': drawScorpion(c, f.x, y, st); break;
     case 'bat': drawBat(c, f.x, y, st); break;
     case 'vacbot': drawVacbot(c, f.x, y, st); break;
-    case 'vacuum': drawDreadVacuum(c, f.x, y, st); drawCritter(c, f.x - 6 * f.face, y - 88 * f.sc, CRITTERS.mittens, { face: f.face, t: f.t, sc: 1.4, hurt: f.hurt }); break;
+    case 'vacuum': drawDreadVacuum(c, f.x, y, st); if (!f.anim2) f.anim2 = newAnim(); drawCritter(c, f.x - 6 * f.face, y - 88 * f.sc, CRITTERS.mittens, { face: f.face, t: f.t, sc: 1.4, hurt: f.hurt, anim: f.anim2, sit: 1, angry: st.angry }); break;
     default: drawCritter(c, f.x, y, CRITTERS[f.art] || CRITTERS.cat, st);
   }
   });
@@ -272,7 +279,27 @@ function drawFoeBar(c, f) {
 function drawNpc(c, n) {
   const L = BREEDS[n.def.breed] || BREEDS.golden;
   const talking = Dialog.open && Dialog.speaker === n.id;
-  drawDog(c, n.x, n.y, L, { face: n.face, t: n.t, move: n.move, hat: n.def.hat, talk: talking, collar: '#4f7fd9', wagFast: dist(n.x, n.y, P.x, P.y) < 110 });
+  if (!n.anim) n.anim = newAnim();
+  const near = dist(n.x, n.y, P.x, P.y) < 110;
+  const st = { face: n.face, t: n.t, anim: n.anim, move: n.move, hat: n.def.hat, talk: talking, sit: n.sit && !near && !talking, happy: near && !talking, collar: '#4f7fd9', wagFast: near, look: near ? clamp((P.y - n.y) / 120, -1, 1) : 0 };
+  // townsfolk are painted into their own little canvas and animate on twos, like hand-drawn background characters
+  const m = c.getTransform(), z = m.a, sz = L.size || 1, W = 150 * sz, H = 150 * sz, oy = H - 22 * sz;
+  if (z > 0 && !talking && typeof document !== 'undefined') {
+    if (!n.cv) n.cv = document.createElement('canvas');
+    const pw = Math.ceil(W * z), ph = Math.ceil(H * z);
+    if (n.cv.width !== pw || n.cv.height !== ph) { n.cv.width = pw; n.cv.height = ph; n.cvF = -9; }
+    const f = Game.frameN || 0;
+    if (f - (n.cvF || -9) >= 2 || f < n.cvF) {
+      n.cvF = f;
+      const g = n.cv.getContext('2d');
+      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pw, ph);
+      g.setTransform(z, 0, 0, z, 0, 0); g.lineJoin = 'round'; g.lineCap = 'round';
+      drawDog(g, W / 2, oy, L, st);
+    }
+    // snap to whole device pixels so the ink stays crisp
+    const px = (Math.round(m.a * (n.x - W / 2) + m.e) - m.e) / m.a, py = (Math.round(m.d * (n.y - oy) + m.f) - m.f) / m.d;
+    c.drawImage(n.cv, px, py, W, H);
+  } else drawDog(c, n.x, n.y, L, st);
   // a mark over folk who have something for you
   const mark = G ? Quests.npcMark(n.id) : null;
   if (mark) {

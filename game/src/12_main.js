@@ -104,13 +104,33 @@ function updatePicks(dt) {
 }
 function drawPick(c, p) {
   const y = p.y - (p.z || 0);
-  if (p.k === 'coin') { c.save(); c.translate(p.x, y - 8); c.scale(Math.abs(Math.cos(p.t * 8)) * 0.7 + 0.3, 1); circ(c, 0, 0, 6); fo(c, '#ffd84d', 2); c.restore(); }
-  else { c.fillStyle = '#ff6f8f'; c.save(); c.translate(p.x, y - 10); c.beginPath(); c.moveTo(0, 8); c.bezierCurveTo(-12, -2, -5, -11, 0, -3); c.bezierCurveTo(5, -11, 12, -2, 0, 8); c.fill(); c.lineWidth = 2; c.strokeStyle = OUT; c.stroke(); c.restore(); }
+  softShadow(c, p.x, p.y + 1, 6 - (p.z || 0) * 0.05, 2.4, 0.22);
+  if (p.k === 'coin') {
+    // a spinning gold coin: the face narrows as it turns, with a rim, a stamped bone and a glint
+    const sp = Math.cos(p.t * 6), w = Math.abs(sp) * 0.8 + 0.2;
+    c.save(); c.translate(p.x, y - 9 + Math.sin(p.t * 3) * 1.5);
+    c.beginPath(); c.ellipse(0, 0, 7.5 * w + 1.2, 7.5, 0, 0, TAU); c.fillStyle = OUT; c.fill();
+    c.beginPath(); c.ellipse(0, 0, 6 * w + 0.6, 6, 0, 0, TAU); c.fillStyle = sp > 0 ? '#ffcf3f' : '#f2b330'; c.fill();
+    c.beginPath(); c.ellipse(0, 0, 4.2 * w, 4.2, 0, 0, TAU); c.fillStyle = '#ffe58a'; c.fill();
+    if (w > 0.5) { c.save(); c.scale(w, 1); c.fillStyle = '#e8a42c'; c.fillRect(-2.4, -0.7, 4.8, 1.4); circ(c, -2.6, -1, 1.1); c.fill(); circ(c, -2.6, 1, 1.1); c.fill(); circ(c, 2.6, -1, 1.1); c.fill(); circ(c, 2.6, 1, 1.1); c.fill(); c.restore(); }
+    const gl = (p.t * 1.3) % 2.4;
+    if (gl < 0.4) { const k = Math.sin((gl / 0.4) * Math.PI); c.globalCompositeOperation = 'lighter'; c.globalAlpha = k; c.fillStyle = '#fffbe0'; c.beginPath(); for (let i = 0; i < 8; i++) { const r = i % 2 ? 1.2 : 6; const a = (i / 8) * TAU; c.lineTo(3 + Math.cos(a) * r, -3 + Math.sin(a) * r); } c.fill(); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; }
+    c.restore();
+  } else {
+    const b = 1 + Math.sin(p.t * 7) * 0.06;
+    c.save(); c.translate(p.x, y - 10); c.scale(b, b);
+    glow(c, 0, 0, 16, '#ff8fa8', 0.35);
+    c.beginPath(); c.moveTo(0, 8); c.bezierCurveTo(-12, -2, -5, -11, 0, -3); c.bezierCurveTo(5, -11, 12, -2, 0, 8);
+    c.lineWidth = 3.2; c.strokeStyle = OUT; c.stroke(); c.fillStyle = '#ff6f8f'; c.fill();
+    c.fillStyle = '#e04a6c'; c.beginPath(); c.moveTo(0, 8); c.bezierCurveTo(6, 2, 9, -2, 8.5, -5); c.bezierCurveTo(10, 0, 5, 4, 0, 8); c.fill();
+    c.fillStyle = '#ffd0db'; c.beginPath(); c.ellipse(-4.5, -4, 2.2, 1.4, -0.6, 0, TAU); c.fill();
+    c.restore();
+  }
 }
 
 // ---------- the camera
 function updateCamera(dt) {
-  Cam.z = clamp(Math.min(SW, SH) / 560, 0.55, 2.6);
+  Cam.z = clamp(Math.min(SW, SH) / 480, 0.6, 2.8);
   let tx = P.x + Input.mx * 40, ty = P.y - 20 + Input.my * 30;
   if (Game.state === 'title') { Game.titleT = (Game.titleT || 0) + dt; tx = TOWNS.waggington.x + Math.cos(Game.titleT * 0.05) * 500; ty = TOWNS.waggington.y + Math.sin(Game.titleT * 0.04) * 300 - 60; }
   const k = Math.min(1, dt * 6);
@@ -162,6 +182,7 @@ Game.update = function (dt) {
 
 Game.render = function (dt) {
   const c = ctx, t = S.time;
+  this.frameN = (this.frameN || 0) + 1;
   c.setTransform(1, 0, 0, 1, 0, 0);
   c.imageSmoothingEnabled = true;
   const z = Cam.z * DPR, sx = (Math.random() - 0.5) * Cam.shake, sy = (Math.random() - 0.5) * Cam.shake;
@@ -183,10 +204,10 @@ Game.render = function (dt) {
   if (Game.state !== 'title' && G) {
     drawTele(c);
     // soft shadows under everyone
-    c.fillStyle = 'rgba(40,25,60,0.2)';
-    if (P.state !== 'dig') { ell(c, P.x, P.y, 15, 5); c.fill(); }
-    for (const f of S.foes) if (!f.gone) { ell(c, f.x, f.y, f.r * 1.05, f.r * 0.38); c.fill(); }
-    for (const n of S.npcs) if (S.scene === 'world' && n.x > v.x0 && n.x < v.x1 && n.y > v.y0 && n.y < v.y1 + 40) { ell(c, n.x, n.y, 15 * ((BREEDS[n.def.breed] || {}).size || 1), 5); c.fill(); }
+    // soft contact shadows that shrink and fade when a body leaves the ground
+    if (P.state !== 'dig') { const up = P.state === 'atk' && P.swingN === 2 ? Math.sin(clamp(P.st / (P.atkDur || 0.34), 0, 1) * Math.PI) : 0; softShadow(c, P.x, P.y + 1, 21 * (1 - up * 0.3), 7.5 * (1 - up * 0.3), 0.36 * (1 - up * 0.4)); }
+    for (const f of S.foes) if (!f.gone) { const up = (f.hop || 0) / 60 + (f.fly ? 0.4 : 0); softShadow(c, f.x, f.y + 1, f.r * 1.45 * (1 - up * 0.3), f.r * 0.52 * (1 - up * 0.3), 0.34 * (1 - Math.min(0.6, up))); }
+    for (const n of S.npcs) if (S.scene === 'world' && n.x > v.x0 && n.x < v.x1 && n.y > v.y0 && n.y < v.y1 + 40) { const sz = (BREEDS[n.def.breed] || {}).size || 1; softShadow(c, n.x, n.y + 1, 21 * sz, 7.5 * sz, 0.34); }
     list.push({ y: P.y, hero: 1 });
     for (const f of S.foes) if (!f.gone) list.push({ y: f.y, f });
     for (const p of S.proj) list.push({ y: p.y + (p.lob ? 1000 : 0), pr: p });
@@ -216,8 +237,48 @@ Game.render = function (dt) {
     drawPrompt(c);
   }
   if (S.scene === 'world') Clouds.draw(c, dt);
+  if (Game.state === 'title') drawTitleArt(c, dt, t);
   if (Game.state !== 'title' && Game.state !== 'boot' && G && this.state !== 'story') HUD.draw(c);
 };
+// ---------- title key art: sunburst, vignette, drifting petals, and the hero striking a pose
+const TitleArt = { anim: null, petals: [], breed: null };
+function drawTitleArt(c, dt, t) {
+  c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const cx = SW / 2, ly = SH / 2 - Math.min(60, SH * 0.08), R = Math.hypot(SW, SH);
+  // warm wash so the logo reads, then the sunburst
+  const wash = c.createRadialGradient(cx, ly, 0, cx, ly, R * 0.6);
+  wash.addColorStop(0, 'rgba(255,236,170,0.32)'); wash.addColorStop(0.45, 'rgba(255,214,140,0.1)'); wash.addColorStop(1, 'rgba(255,214,140,0)');
+  c.fillStyle = wash; c.fillRect(0, 0, SW, SH);
+  c.save(); c.translate(cx, ly); c.rotate(t * 0.04);
+  const n = 18;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU, w = (TAU / n) * 0.32;
+    const g = c.createLinearGradient(0, 0, Math.cos(a) * R * 0.7, Math.sin(a) * R * 0.7);
+    g.addColorStop(0, 'rgba(255,250,220,0.3)'); g.addColorStop(0.7, 'rgba(255,250,220,0.06)'); g.addColorStop(1, 'rgba(255,250,220,0)');
+    c.fillStyle = g; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, a - w, a + w); c.closePath(); c.fill();
+  }
+  c.restore();
+  // plum vignette at the edges
+  const vg = c.createRadialGradient(cx, SH * 0.48, Math.min(SW, SH) * 0.35, cx, SH * 0.48, R * 0.62);
+  vg.addColorStop(0, 'rgba(59,34,53,0)'); vg.addColorStop(1, 'rgba(59,34,53,0.42)');
+  c.fillStyle = vg; c.fillRect(0, 0, SW, SH);
+  // petals and leaves on the breeze
+  const P2 = TitleArt.petals;
+  while (P2.length < 26) P2.push({ x: rand(-SW * 0.2, SW), y: rand(-40, SH), vx: rand(30, 70), vy: rand(14, 40), r: rand(0, TAU), vr: rand(-2, 2), s: rand(3, 6), col: pick(['#ffb3c7', '#ffffff', '#ffd84d', '#9fd66a', '#ff9e7a']), ph: rand(0, 6) });
+  for (const q of P2) {
+    q.x += (q.vx + Math.sin(t * 1.3 + q.ph) * 20) * dt; q.y += q.vy * dt; q.r += q.vr * dt;
+    if (q.x > SW + 20 || q.y > SH + 20) { q.x = rand(-SW * 0.3, SW * 0.6); q.y = -20; }
+    c.save(); c.translate(q.x, q.y); c.rotate(q.r); c.scale(1, 0.5 + 0.5 * Math.abs(Math.sin(t * 3 + q.ph)));
+    c.fillStyle = q.col; c.beginPath(); c.ellipse(0, 0, q.s, q.s * 0.55, 0, 0, TAU); c.fill(); c.restore();
+  }
+  // the hero, big, wagging with a stick, Squeaky glowing alongside
+  if (!TitleArt.anim) { TitleArt.anim = newAnim(); const sv = Game.localSave(); TitleArt.breed = (sv && sv.hero && BREEDS[sv.hero.breed]) ? sv.hero.breed : 'corgi'; }
+  const wide = SW > SH * 1.1, sc = clamp(Math.min(SH, SW * 1.25) / 260, 1.3, 3.4);
+  const hx = wide ? cx - Math.min(SW * 0.34, 470) : cx - SW * 0.2, hy = SH - (wide ? 34 : 40);
+  softShadow(c, hx, hy + 2, 30 * sc, 9 * sc, 0.4);
+  drawDog(c, hx, hy, BREEDS[TitleArt.breed] || BREEDS.corgi, { face: 1, t, anim: TitleArt.anim, sc, item: 'stick', collar: '#e8475f', hat: 'bandana', happy: Math.sin(t * 0.7) > 0.6, wagFast: 1, look: -0.4 });
+  c.save(); c.translate(hx + 34 * sc, hy - 62 * sc); c.scale(sc * 0.75, sc * 0.75); drawSqueaky(c, 0, 0, t, false); c.restore();
+}
 function drawProp(c, p) {
   if (p.gone) return;
   if (p.kind === 'bld') {
@@ -267,7 +328,7 @@ function boot() {
   Clouds.init();
   Packs.init();
   makeNpcs();
-  Cam.x = TOWNS.waggington.x; Cam.y = TOWNS.waggington.y; Cam.z = clamp(Math.min(SW, SH) / 560, 0.55, 2.6);
+  Cam.x = TOWNS.waggington.x; Cam.y = TOWNS.waggington.y; Cam.z = clamp(Math.min(SW, SH) / 480, 0.6, 2.8);
   UI.applyTouchSetting();
   if (matchMedia('(pointer: coarse)').matches) { document.body.classList.add('touchy'); Input.mode = 'touch'; }
   UI.showTitle();

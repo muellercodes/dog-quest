@@ -230,7 +230,7 @@ UI.renderMenu = function () {
 };
 UI.fillCanvases = function () {
   for (const el of document.querySelectorAll('#panel canvas[data-icon]')) { const src = el.dataset.icon.startsWith('t:') ? trickIconCanvas(el.dataset.icon.slice(2), 56) : itemIcon(el.dataset.icon, 56); el.width = src.width; el.height = src.height; el.getContext('2d').drawImage(src, 0, 0); }
-  const hv = $('#herocv'); if (hv) { const g = hv.getContext('2d'); hv.width = 240; hv.height = 200; g.fillStyle = '#ffe6a8'; g.fillRect(0, 0, 240, 200); g.fillStyle = 'rgba(40,25,60,0.2)'; ell(g, 120, 168, 50, 12); g.fill(); g.lineJoin = 'round'; g.lineCap = 'round'; const body = ITEMS[G.eq.body] || {}; const st = { face: 1, t: S.time, sc: 2.6, hat: G.eq.head ? ITEMS[G.eq.head].art : null, item: G.eq.mouth ? ITEMS[G.eq.mouth].art : null, collar: body.art && body.art[0] === '#' ? body.art : '#e8475f', coat: body.coat, cape: body.cape }; drawDog(g, 110, 168, heroLook(), st); drawCoat(g, 110, 168, heroLook(), st); }
+  const hv = $('#herocv'); if (hv) { const g = hv.getContext('2d'); hv.width = 240; hv.height = 200; g.fillStyle = '#ffe6a8'; g.fillRect(0, 0, 240, 200); g.fillStyle = 'rgba(40,25,60,0.2)'; ell(g, 120, 168, 50, 12); g.fill(); g.lineJoin = 'round'; g.lineCap = 'round'; const body = ITEMS[G.eq.body] || {}; const st = { face: 1, t: S.time, sc: 2.6, hat: G.eq.head ? ITEMS[G.eq.head].art : null, item: G.eq.mouth ? ITEMS[G.eq.mouth].art : null, collar: body.art && body.art[0] === '#' ? body.art : '#e8475f', coat: body.coat, cape: body.cape }; st.anim = UI.heroAnim || (UI.heroAnim = newAnim()); st.happy = 1; drawDog(g, 110, 168, heroLook(), st); }
 };
 UI.gearTab = function () {
   const m = this.menu, slot = m.slot;
