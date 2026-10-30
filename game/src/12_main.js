@@ -285,7 +285,7 @@ function drawProp(c, p) {
     const s = bldSprite(p), d = BLD[p.bk];
     const hide = P.y < p.y - 8 && P.y > p.y - d.oy * 0.9 && Math.abs(P.x - p.x) < d.w * 0.42 && Game.state !== 'title';
     if (hide) c.globalAlpha = 0.55;
-    drawSprite(c, s, p.x, p.y, 1);
+    drawBld(c, p); // ART-TOWN: baked building plus its live touches (smoke, flags, glow)
     c.globalAlpha = 1;
     return;
   }
