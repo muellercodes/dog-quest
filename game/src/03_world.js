@@ -337,7 +337,6 @@ World.buildCoast = function () {
     lip: this.contours(F, 0, 24),          // top edge of the land (the cliff lip, or the beach waterline)
     foam: this.contours(FE, 0, 28),        // base of the cliffs and beaches: the surf line
     ring: this.contours(FE, -0.035, 28),   // shallow-water foam ring
-    ring2: this.contours(FE, -0.085, 32),  // outer ring where the shelf drops off
   };
 };
 

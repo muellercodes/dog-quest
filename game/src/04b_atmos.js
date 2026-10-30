@@ -154,10 +154,10 @@ Atmos.screen = function (c, dt) {
     this.overKey = key;
     const o = this.overCv, g = o.getContext('2d'), W = o.width;
     g.clearRect(0, 0, W, W);
-    // the piece covers the lower-right 40% x 45% of the screen; alpha follows the normalised distance from the
+    // the piece covers the lower-right 34% x 40% of the screen; alpha follows the normalised distance from the
     // screen centre and is zero along the piece's inner edges, so the four mirrored pieces join without seams
     const [r, gg, bb, a] = T.map((q, i) => (i < 3 ? Math.round(q) : q));
-    const img = g.createImageData(W, W), d = img.data, u0 = 1 - 2 * 0.4, v0 = 1 - 2 * 0.45, r0 = 1.03, r1 = 1.42;
+    const img = g.createImageData(W, W), d = img.data, u0 = 1 - 2 * 0.34, v0 = 1 - 2 * 0.4, r0 = 1.06, r1 = 1.42;
     const dr = Math.round(r * 0.3 + 40), dg = Math.round(gg * 0.2 + 18), db = Math.round(bb * 0.3 + 50);
     for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
       const u = u0 + (1 - u0) * (i + 0.5) / W, v = v0 + (1 - v0) * (j + 0.5) / W, rn = Math.sqrt(u * u + v * v);
@@ -173,9 +173,9 @@ Atmos.screen = function (c, dt) {
       sg.fillStyle = sun; sg.fillRect(0, 0, 64, 64);
     }
   }
-  const cw = SW * 0.4, ch = SH * 0.45, o = this.overCv;
+  const cw = SW * 0.34, ch = SH * 0.4, o = this.overCv;
   c.save(); c.setTransform(DPR, 0, 0, DPR, 0, 0);
-  c.drawImage(this.sunCv, 0, 0, SW * 0.45, SH * 0.6);
+  c.drawImage(this.sunCv, 0, 0, SW * 0.34, SH * 0.46);
   c.drawImage(o, SW - cw, SH - ch, cw, ch);
   c.setTransform(-DPR, 0, 0, DPR, SW * DPR, 0); c.drawImage(o, SW - cw, SH - ch, cw, ch);
   c.setTransform(DPR, 0, 0, -DPR, 0, SH * DPR); c.drawImage(o, SW - cw, SH - ch, cw, ch);

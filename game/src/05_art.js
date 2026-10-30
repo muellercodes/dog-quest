@@ -702,17 +702,16 @@ function decorSprite(d) { return sprite('d:' + d.kind + ':' + d.v + ':' + d.b, 3
 // all the flat decor in view; grass, ferns and flowers bend in the wind
 const DSWAY = { tuft: 0.16, fern: 0.1, flower: 0.12 };
 function drawDecorAll(c, v, t) {
-  const m = c.getTransform(), A = m.a, B = m.b, C = m.c, D = m.d, E = m.e, F = m.f;
   for (let cy = Math.max(0, Math.floor(v.y0 / PC)); cy <= Math.min(PCH - 1, Math.floor(v.y1 / PC)); cy++)
     for (let cx = Math.max(0, Math.floor(v.x0 / PC)); cx <= Math.min(PCW - 1, Math.floor(v.x1 / PC)); cx++)
       for (const d of World.dgrid[cy * PCW + cx]) {
         if (d.x < v.x0 || d.x > v.x1 || d.y < v.y0 || d.y > v.y1) continue;
         const s = decorSprite(d), amp = DSWAY[d.kind];
         if (amp) {
-          const k = windK(d.x, d.y, t) * amp;
-          c.setTransform(A, B, C - A * k, D - B * k, A * d.x + C * d.y + E, B * d.x + D * d.y + F);
-          c.drawImage(s.c, -s.ox, -s.oy, s.w, s.h);
+          // two axis-aligned bands: the tips lean with the wind, the roots stay put
+          const dx = windK(d.x, d.y, t) * amp * 8, cut = (s.oy - 5) * SPR_SC;
+          c.drawImage(s.c, 0, 0, s.c.width, cut + 2, d.x - s.ox + dx, d.y - s.oy, s.w, (cut + 2) / SPR_SC);
+          c.drawImage(s.c, 0, cut, s.c.width, s.c.height - cut, d.x - s.ox, d.y - s.oy + cut / SPR_SC, s.w, s.h - cut / SPR_SC);
         } else c.drawImage(s.c, d.x - s.ox, d.y - s.oy, s.w, s.h);
       }
-  c.setTransform(A, B, C, D, E, F);
 }

@@ -587,18 +587,15 @@ function offsetPts(P, d, t, wob) {
 Ground.drawSurf = function (c, v, t) {
   const S = World.shore;
   const pad = 40;
-  const foam = piecesIn(S.foam, v.x0, v.y0, v.x1, v.y1, pad), ring = piecesIn(S.ring, v.x0, v.y0, v.x1, v.y1, pad), ring2 = piecesIn(S.ring2, v.x0, v.y0, v.x1, v.y1, pad);
+  const foam = piecesIn(S.foam, v.x0, v.y0, v.x1, v.y1, pad), ring = piecesIn(S.ring, v.x0, v.y0, v.x1, v.y1, pad);
   c.lineCap = 'round'; c.lineJoin = 'round';
-  // the outer shelf: a faint line drifting in and out
-  c.beginPath(); for (const P of ring2) smoothPath(c, offsetPts(P, Math.sin(t * 0.7) * 3, t, 2.5));
-  c.lineWidth = 2.2; c.strokeStyle = 'rgba(255,255,255,0.16)'; c.stroke();
   // shallow foam: dashes that flow along the shore
   c.setLineDash([22, 30, 9, 26, 30, 40]); c.lineWidth = 2.6; c.strokeStyle = 'rgba(255,255,255,0.4)';
   for (const P of ring) { c.lineDashOffset = P.s0 - t * 11; c.beginPath(); smoothPath(c, offsetPts(P, Math.sin(t * 0.9 + P.s0 * 0.01) * 2.5, t, 2)); c.stroke(); }
   c.setLineDash([]);
-  // two waves rolling in toward the shore
-  for (let k = 0; k < 2; k++) {
-    const ph = (t * 0.32 + k * 0.5) % 1, d = 3 + 17 * (1 - ease(ph)), a = Math.sin(ph * Math.PI) * 0.6;
+  // a wave rolling in toward the shore
+  {
+    const ph = (t * 0.4) % 1, d = 3 + 17 * (1 - ease(ph)), a = Math.sin(ph * Math.PI) * 0.6;
     c.beginPath(); for (const P of foam) smoothPath(c, offsetPts(P, d, t, 2.2));
     c.lineWidth = 2.2 + ph * 1.6; c.strokeStyle = `rgba(255,255,255,${a.toFixed(3)})`; c.stroke();
   }
@@ -616,7 +613,7 @@ Ground.drawSurf = function (c, v, t) {
 Ground.marks = [];
 Ground.sparks = [];
 Ground.drawWaves = function (c, v, t, dt) {
-  const M = this.marks, W = v.x1 - v.x0, H = v.y1 - v.y0, want = Math.round(clamp((W * H) / 24000, 14, 44));
+  const M = this.marks, W = v.x1 - v.x0, H = v.y1 - v.y0, want = Math.round(clamp((W * H) / 34000, 10, 30));
   for (let tries = 0; M.length < want && tries < 6; tries++) {
     const x = rand(v.x0 - 30, v.x1 + 30), y = rand(v.y0 - 20, v.y1 + 20), fe = World.FEat(x, y);
     if (fe < -0.05) M.push({ x, y, age: 0, life: rand(2.6, 4.8), w: rand(12, 26) * (fe < -0.2 ? 1.2 : 0.9), vx: rand(5, 11), ph: rand(0, TAU) });
@@ -637,7 +634,7 @@ Ground.drawWaves = function (c, v, t, dt) {
   c.globalAlpha = 1;
   // sparkles
   const SP = this.sparks;
-  while (SP.length < 14) { const x = rand(v.x0, v.x1), y = rand(v.y0, v.y1); if (World.FEat(x, y) < -0.03) SP.push({ x, y, age: 0, life: rand(0.5, 1.2), r: rand(2.2, 4.4) }); else break; }
+  while (SP.length < 10) { const x = rand(v.x0, v.x1), y = rand(v.y0, v.y1); if (World.FEat(x, y) < -0.03) SP.push({ x, y, age: 0, life: rand(0.5, 1.2), r: rand(2.2, 4.4) }); else break; }
   c.fillStyle = '#ffffff';
   c.beginPath();
   for (let i = SP.length - 1; i >= 0; i--) {
