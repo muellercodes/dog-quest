@@ -64,8 +64,14 @@ Game.fade = function (fn, text) {
   if (this.fading) return;
   this.fading = true;
   const f = $('#fade'); f.querySelector('.ft').textContent = text || '';
-  f.classList.add('on');
-  setTimeout(() => { try { fn(); } catch (e) { console.error(e); } setTimeout(() => { f.classList.remove('on'); this.fading = false; }, text ? 600 : 120); }, 320);
+  // close the iris on the hero when there is one on screen, else on the middle
+  const aim = () => {
+    const onHero = G && Game.state !== 'title';
+    const ix = onHero ? clamp(SW / 2 + (P.x - Cam.x) * Cam.z, 20, SW - 20) : SW / 2, iy = onHero ? clamp(SH / 2 + (P.y - 24 - Cam.y) * Cam.z, 20, SH - 20) : SH / 2;
+    f.style.setProperty('--ix', ix + 'px'); f.style.setProperty('--iy', iy + 'px');
+  };
+  aim(); f.classList.add('on');
+  setTimeout(() => { try { fn(); } catch (e) { console.error(e); } setTimeout(() => { aim(); f.classList.remove('on'); this.fading = false; }, text ? 600 : 120); }, 320);
 };
 Game.regionMusic = function () {
   if (S.scene === 'dungeon') return 'dungeon';
