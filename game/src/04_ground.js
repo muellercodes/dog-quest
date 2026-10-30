@@ -169,8 +169,8 @@ Ground.step = function (j) {
     j.g.imageSmoothingEnabled = true;
     j.g.drawImage(this.field(j.x0, j.y0), -FLD, -FLD, FPX * FLD, FPX * FLD);
     j.g.translate(-j.x0, -j.y0); j.g.lineJoin = 'round'; j.g.lineCap = 'round';
-  } else if (j.stage === 1) { this.paintCliffs(j.g, j.x0, j.y0); this.paintLand(j.g, j.x0, j.y0); }
-  else { this.paintRoads(j.g, j.x0, j.y0); this.paintPlazas(j.g, j.x0, j.y0); }
+  } else if (j.stage === 1) this.paintLand(j.g, j.x0, j.y0);
+  else { this.paintCliffs(j.g, j.x0, j.y0); this.paintRoads(j.g, j.x0, j.y0); this.paintPlazas(j.g, j.x0, j.y0); }
   j.stage++;
   this.bakeMs = (this.bakeMs || 0) + performance.now() - t0;
   return j.stage >= 3;
@@ -259,7 +259,7 @@ Ground.paintCliffs = function (g, x0, y0) {
 // ---------- painted strokes on the land, per biome, placed by a hash so chunks agree at their seams
 const AUTUMN = ['#f0973a', '#e5623b', '#f7c548', '#d9822f', '#c94f3d'];
 Ground.paintLand = function (g, x0, y0) {
-  const S = 15, pad = 26;
+  const S = 17, pad = 26;
   const paths = {};
   const P = (key) => paths[key] || (paths[key] = new Path2D());
   const leaves = [], puddles = [], mists = [], stars = [];
@@ -278,7 +278,7 @@ Ground.paintLand = function (g, x0, y0) {
         if (h3 < 0.12 + dn * 0.42 + ts * 0.15) {
           const lean = 2 + h4 * 4, hgt = 5 + h4 * 5, dk = h1 < 0.62;
           const path = P((dk ? 'gd:' : 'gl:') + b);
-          const cnt = 2 + ((h2 * 3) | 0);
+          const cnt = 2 + ((h2 * 2.4) | 0);
           for (let q = 0; q < cnt; q++) bladeTo(path, x + q * 3 - cnt * 1.5, y + (q % 2) * 1.5, lean + q * 0.6 - 1, hgt * (0.7 + ((q * 7 + ix) % 3) * 0.15), 2.3);
         }
         if (b !== 'spooky' && b !== 'coast' && h4 > 0.975 && dn > 0.45) {
@@ -301,7 +301,7 @@ Ground.paintLand = function (g, x0, y0) {
         }
         if (h4 > 0.97) stars.push([x, y, h1]);
       } else if (b === 'isle') {
-        if (dn > 0.42 && h3 < 0.85) {
+        if (dn > 0.34 && h3 < 0.9) {
           // knitted carpet: rows of little V stitches
           const path = P(h1 < 0.5 ? 'knitd' : 'knitl');
           for (let q = 0; q < 2; q++) { const kx = ix * S + q * 7.5 + (iy % 2) * 3.7, ky = iy * S + q * 4; path.moveTo(kx - 3, ky - 3); path.quadraticCurveTo(kx - 1.6, ky + 1, kx, ky + 2.4); path.quadraticCurveTo(kx - 2.6, ky + 0.6, kx - 3, ky - 3); path.moveTo(kx + 3, ky - 3); path.quadraticCurveTo(kx + 1.6, ky + 1, kx, ky + 2.4); path.quadraticCurveTo(kx + 2.6, ky + 0.6, kx + 3, ky - 3); }
@@ -348,16 +348,16 @@ Ground.paintLand = function (g, x0, y0) {
   }
   fillP('drift', 'rgba(140,164,214,0.32)'); fillP('driftl', 'rgba(255,255,255,0.9)');
   fillP('rip', 'rgba(196,140,70,0.38)'); fillP('ripl', 'rgba(255,240,200,0.5)');
-  fillP('knitd', 'rgba(150,84,120,0.16)'); fillP('knitl', 'rgba(255,230,240,0.2)');
+  fillP('knitd', 'rgba(150,84,120,0.22)'); fillP('knitl', 'rgba(255,232,242,0.28)');
   // fallen autumn leaves
-  for (const [lx, ly, h1, h2, h3, c0] of leaves) {
-    const a = h1 * 6, col = c0 || AUTUMN[(h2 * 5) | 0], s = 0.8 + h2 * 0.5;
-    g.save(); g.translate(lx, ly); g.rotate(a); g.scale(s, s);
-    g.fillStyle = 'rgba(60,40,70,0.16)'; g.beginPath(); g.ellipse(0.8, 1.1, 4.4, 2.6, 0, 0, TAU); g.fill();
-    g.fillStyle = col; g.beginPath(); g.moveTo(-4.6, 0); g.bezierCurveTo(-2, -4, 2, -3.6, 4.6, 0); g.bezierCurveTo(2, 3.6, -2, 4, -4.6, 0); g.fill();
-    g.fillStyle = lightTone(col, 0.3); g.beginPath(); g.moveTo(-3.6, -0.3); g.bezierCurveTo(-1.5, -3, 1.5, -2.6, 3.6, -0.3); g.closePath(); g.fill();
-    g.strokeStyle = shadeTone(col, 0.32); g.lineWidth = 0.7; g.beginPath(); g.moveTo(-4.4, 0); g.lineTo(4, 0); g.stroke();
-    g.restore();
+  if (leaves.length) {
+    const m = g.getTransform();
+    for (const [lx, ly, h1, h2, h3, c0] of leaves) {
+      const a = h1 * 6, s = 0.4 + h2 * 0.25, ca = Math.cos(a) * s, sa = Math.sin(a) * s, spr = leafSprite(c0 || AUTUMN[(h2 * 5) | 0]);
+      g.setTransform(ca * m.a, sa * m.a, -sa * m.a, ca * m.a, lx * m.a + m.e, ly * m.d + m.f);
+      g.drawImage(spr, -12, -9);
+    }
+    g.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
   }
   // snow and sand sparkles
   if (stars.length) {
@@ -366,6 +366,18 @@ Ground.paintLand = function (g, x0, y0) {
     g.fillStyle = 'rgba(150,186,236,0.8)'; g.fill(sp);
   }
 };
+// a fallen leaf with its little shadow, baked once per colour at 2x
+const _leafSpr = {};
+function leafSprite(col) {
+  if (_leafSpr[col]) return _leafSpr[col];
+  const c = mkCanvas(24, 18), g = c.getContext('2d');
+  g.translate(12, 9); g.scale(2, 2);
+  g.fillStyle = 'rgba(60,40,70,0.16)'; g.beginPath(); g.ellipse(0.8, 1.1, 4.4, 2.6, 0, 0, TAU); g.fill();
+  g.fillStyle = col; g.beginPath(); g.moveTo(-4.6, 0); g.bezierCurveTo(-2, -4, 2, -3.6, 4.6, 0); g.bezierCurveTo(2, 3.6, -2, 4, -4.6, 0); g.fill();
+  g.fillStyle = lightTone(col, 0.3); g.beginPath(); g.moveTo(-3.6, -0.3); g.bezierCurveTo(-1.5, -3, 1.5, -2.6, 3.6, -0.3); g.closePath(); g.fill();
+  g.strokeStyle = shadeTone(col, 0.32); g.lineWidth = 0.7; g.beginPath(); g.moveTo(-4.4, 0); g.lineTo(4, 0); g.stroke();
+  return (_leafSpr[col] = c);
+}
 function hexA(h, a) { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; }
 function nearSegs(segs, x, y, r) {
   for (const s of segs) {
