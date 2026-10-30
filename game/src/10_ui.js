@@ -397,22 +397,57 @@ MapView.draw = function (cv2) {
   cv2.width = W * DPR; cv2.height = H * DPR;
   const g = cv2.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
   const k = Math.min(W / WW, H / WH), ox = (W - WW * k) / 2, oy = (H - WH * k) / 2;
-  g.fillStyle = '#3b94dd'; g.fillRect(0, 0, W, H);
+  // sea with a few painted wave marks
+  const sea = g.createLinearGradient(0, 0, 0, H); sea.addColorStop(0, '#4aa3e6'); sea.addColorStop(1, '#2f7fcf'); g.fillStyle = sea; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1.6; const wr = mulberry32(7);
+  for (let i = 0; i < 70; i++) { const x = wr() * W, y = wr() * H; g.beginPath(); g.arc(x, y, 5, Math.PI * 1.15, Math.PI * 1.85); g.arc(x + 9, y, 5, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
   g.imageSmoothingEnabled = true;
   g.drawImage(this.base(), ox, oy, WW * k, WH * k);
-  // fog: parchment clouds over places not seen
-  g.fillStyle = '#efe0bd';
-  const cw = FOGC * k + 1;
-  for (let j = 0; j < FOGH; j++) for (let i = 0; i < FOGW; i++) if (!Fog.bits[j * FOGW + i]) g.fillRect(ox + i * FOGC * k - 0.5, oy + j * FOGC * k - 0.5, cw, cw);
+  // fog: soft parchment clouds over places not seen, painted small and blown up so the edges stay soft
+  if (!this.fogC) this.fogC = mkCanvas(FOGW + 2, FOGH + 2);
+  const fg = this.fogC.getContext('2d'), fd = fg.createImageData(FOGW + 2, FOGH + 2);
+  for (let j = -1; j <= FOGH; j++) for (let i = -1; i <= FOGW; i++) { const q = ((j + 1) * (FOGW + 2) + (i + 1)) * 4, seen = Fog.bits[clamp(j, 0, FOGH - 1) * FOGW + clamp(i, 0, FOGW - 1)]; fd.data[q] = 239; fd.data[q + 1] = 224; fd.data[q + 2] = 189; fd.data[q + 3] = seen ? 0 : 255; }
+  fg.putImageData(fd, 0, 0);
+  g.save(); g.beginPath(); g.rect(ox, oy, WW * k, WH * k); g.clip();
+  g.drawImage(this.fogC, ox - FOGC * k, oy - FOGC * k, (FOGW + 2) * FOGC * k, (FOGH + 2) * FOGC * k);
+  g.restore();
   g.font = `700 ${Math.max(11, 13 * k * 9)}px Fredoka, ui-rounded, sans-serif`; g.textAlign = 'center';
   const label = (txt, x, y, col) => { g.lineWidth = 3.5; g.strokeStyle = OUT; g.strokeText(txt, x, y); g.fillStyle = col || '#fff'; g.fillText(txt, x, y); };
-  for (const id in TOWNS) { const T = TOWNS[id]; if (!Fog.seen(T.x, T.y)) continue; const x = ox + T.x * k, y = oy + T.y * k; g.fillStyle = '#ffd84d'; g.strokeStyle = OUT; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 5, 0, TAU); g.fill(); g.stroke(); label(T.name, x, y - 9); }
-  for (const id in DUNGEON_SPOTS) { const D = DUNGEON_SPOTS[id]; if (!Fog.seen(D.x, D.y)) continue; const x = ox + D.x * k, y = oy + D.y * k; g.fillStyle = G.cleared[id] ? '#9be07a' : DUNGEONS[id].main ? '#e8475f' : '#a87a50'; g.strokeStyle = OUT; g.lineWidth = 2; g.beginPath(); rrect(g, x - 5, y - 5, 10, 10, 2); g.fill(); g.stroke(); if (DUNGEONS[id].main) label(DUNGEONS[id].name, x, y + 18, '#ffe0e4'); }
-  const t = Quests.target();
-  if (t && t.x != null) { const x = ox + t.x * k, y = oy + t.y * k, p = 7 + Math.sin(S.time * 5) * 2; g.strokeStyle = '#ffd84d'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, p + 4, 0, TAU); g.stroke(); g.fillStyle = '#e8475f'; g.beginPath(); g.arc(x, y, 4, 0, TAU); g.fill(); }
+  // little painted houses for towns, arches for dungeons
+  const house = (x, y) => {
+    g.lineJoin = 'round'; g.strokeStyle = OUT; g.lineWidth = 2.2;
+    g.fillStyle = '#fff4e2'; g.beginPath(); g.rect(x - 5.5, y - 4, 11, 8); g.fill(); g.stroke();
+    g.fillStyle = '#e8475f'; g.beginPath(); g.moveTo(x - 8, y - 3); g.lineTo(x, y - 10); g.lineTo(x + 8, y - 3); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = OUT; g.fillRect(x - 1.5, y, 3, 4);
+  };
+  const arch = (x, y, col, done) => {
+    g.strokeStyle = OUT; g.lineWidth = 2.2; g.fillStyle = col;
+    g.beginPath(); g.moveTo(x - 7, y + 5); g.lineTo(x - 7, y - 1); g.arc(x, y - 1, 7, Math.PI, 0); g.lineTo(x + 7, y + 5); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = OUT; g.beginPath(); g.moveTo(x - 3, y + 5); g.lineTo(x - 3, y); g.arc(x, y, 3, Math.PI, 0); g.lineTo(x + 3, y + 5); g.closePath(); g.fill();
+    if (done) { g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 3, y - 9); g.lineTo(x + 6, y - 6); g.lineTo(x + 11, y - 13); g.stroke(); }
+  };
+  for (const id in DUNGEON_SPOTS) { const D = DUNGEON_SPOTS[id]; if (!Fog.seen(D.x, D.y)) continue; const x = ox + D.x * k, y = oy + D.y * k; arch(x, y, G.cleared[id] ? '#9be07a' : DUNGEONS[id].main ? '#e8475f' : '#c8945e', G.cleared[id]); if (DUNGEONS[id].main) label(DUNGEONS[id].name, x, y + 19, '#ffe0e4'); }
+  for (const id in TOWNS) { const T = TOWNS[id]; if (!Fog.seen(T.x, T.y)) continue; const x = ox + T.x * k, y = oy + T.y * k; house(x, y); label(T.name, x, y - 13); }
   const px = ox + (S.scene === 'world' ? P.x : G.x) * k, py = oy + (S.scene === 'world' ? P.y : G.y) * k;
-  g.save(); g.translate(px, py); g.fillStyle = '#ffffff'; g.strokeStyle = OUT; g.lineWidth = 2.5; g.beginPath(); g.arc(0, 0, 7, 0, TAU); g.fill(); g.stroke(); drawPaw(g, 0, 0, 5, '#e8475f'); g.restore();
-  g.font = '600 13px Fredoka, ui-rounded, sans-serif'; g.textAlign = 'left'; label('Paw: you   Ring: your goal   Red squares: big dungeons', 12, H - 12);
+  const t = Quests.target();
+  if (t && t.x != null) {
+    const x = ox + t.x * k, y = oy + t.y * k;
+    // a dotted trail from you to the goal
+    g.save(); g.setLineDash([2, 6]); g.lineCap = 'round'; g.strokeStyle = 'rgba(232,71,95,0.9)'; g.lineWidth = 3; g.beginPath(); g.moveTo(px, py); g.quadraticCurveTo((px + x) / 2 + (y - py) * 0.15, (py + y) / 2 - (x - px) * 0.15, x, y); g.stroke(); g.restore();
+    g.strokeStyle = OUT; g.lineWidth = 5; g.beginPath(); g.arc(x, y, 11, 0, TAU); g.stroke(); g.strokeStyle = '#ffd84d'; g.lineWidth = 3; g.stroke();
+    g.strokeStyle = '#e8475f'; g.lineWidth = 3; g.beginPath(); g.moveTo(x - 4, y - 4); g.lineTo(x + 4, y + 4); g.moveTo(x + 4, y - 4); g.lineTo(x - 4, y + 4); g.stroke();
+  }
+  g.save(); g.translate(px, py); g.fillStyle = '#ffffff'; g.strokeStyle = OUT; g.lineWidth = 2.5; g.beginPath(); g.arc(0, 0, 8, 0, TAU); g.fill(); g.stroke(); drawPaw(g, 0, 0, 5.5, '#e8475f'); g.restore();
+  // compass rose
+  const cx = W - 40, cy = 44;
+  g.save(); g.translate(cx, cy);
+  g.fillStyle = 'rgba(255,250,240,0.9)'; g.strokeStyle = OUT; g.lineWidth = 2.5; g.beginPath(); g.arc(0, 0, 22, 0, TAU); g.fill(); g.stroke();
+  for (let i = 0; i < 4; i++) { g.rotate(Math.PI / 2); g.fillStyle = i === 3 ? '#e8475f' : '#3b2235'; g.beginPath(); g.moveTo(0, -19); g.lineTo(5, 0); g.lineTo(-5, 0); g.closePath(); g.fill(); }
+  g.restore();
+  g.font = '700 11px Fredoka, ui-rounded, sans-serif'; label('N', cx, cy - 26);
+  // a parchment frame
+  g.strokeStyle = OUT; g.lineWidth = 4; g.strokeRect(2, 2, W - 4, H - 4); g.strokeStyle = 'rgba(255,240,200,0.6)'; g.lineWidth = 2; g.strokeRect(7, 7, W - 14, H - 14);
+  g.font = '600 13px Fredoka, ui-rounded, sans-serif'; g.textAlign = 'left'; label('Paw: you   X: your goal   Red arches: big dungeons', 14, H - 14);
 };
 
 // ---------- full screens: title, new game, story, fainting, ending
@@ -516,7 +551,7 @@ UI.updateTouch = function () {
 const HUD = { portrait: null, pkey: '' };
 HUD.draw = function (c) {
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (!this.satT || --this.satT <= 0) { this.satT = 90; this.sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0; }
+  if (!this.satT || --this.satT <= 0) { this.satT = 90; this.touchy = document.body.classList.contains('touchy'); this.sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0; }
   const top = 10 + this.sat;
   // portrait and bars
   const key = G.hero.breed + (G.eq.head || '');
@@ -528,6 +563,7 @@ HUD.draw = function (c) {
   c.fillStyle = OUT; c.font = '700 14px Fredoka, ui-rounded, sans-serif'; c.textAlign = 'center'; c.fillText('Lv ' + G.lv, x0 + 32, y0 + 65);
   const bw = Math.min(230, SW * 0.42), bx = x0 + 70;
   const bar = (y, h, k, col, label, flash, trail) => {
+    k = clamp(k || 0, 0, 1); if (trail != null) trail = clamp(trail, 0, 1);
     c.fillStyle = OUT; c.beginPath(); rrect(c, bx - 3, y - 3, bw + 6, h + 6, (h + 6) / 2); c.fill();
     c.fillStyle = '#5a3a52'; c.beginPath(); rrect(c, bx, y, bw, h, h / 2); c.fill();
     c.fillStyle = 'rgba(30,14,28,0.35)'; c.beginPath(); rrect(c, bx + 2, y + 1, bw - 4, h * 0.35, h * 0.17); c.fill();
@@ -595,10 +631,35 @@ HUD.draw = function (c) {
   // boss health
   const B = Bosses.current;
   if (B && B.hp > 0 && S.scene === 'dungeon') {
-    const w = Math.min(560, SW - 40), x = SW / 2 - w / 2, y = SH - (document.body.classList.contains('touchy') ? 290 : 104);
-    c.font = '700 18px Fredoka, ui-rounded, sans-serif'; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = OUT; c.strokeText(B.name, SW / 2, y - 8); c.fillStyle = '#fff'; c.fillText(B.name, SW / 2, y - 8);
+    const w = Math.min(560, SW - 40), x = SW / 2 - w / 2, y = SH - (this.touchy ? 290 : 104), k = B.hp / B.maxHp;
+    if (this.bossB !== B) { this.bossB = B; this.bossTrail = k; this.bossCard = 0; }
+    this.bossTrail = Math.max(k, (this.bossTrail || k) - 0.35 / 60);
+    c.font = '700 18px Fredoka, ui-rounded, sans-serif'; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = OUT; c.strokeText(B.name, SW / 2, y - 8); c.fillStyle = B.enraged ? '#ffb3b3' : '#fff'; c.fillText(B.name, SW / 2, y - 8);
     c.fillStyle = OUT; c.beginPath(); rrect(c, x - 3, y - 3, w + 6, 22, 11); c.fill();
-    c.fillStyle = '#e8475f'; c.beginPath(); rrect(c, x, y, Math.max(16, w * B.hp / B.maxHp), 16, 8); c.fill();
+    c.fillStyle = '#5a3a52'; c.beginPath(); rrect(c, x, y, w, 16, 8); c.fill();
+    c.fillStyle = '#ffe9a8'; c.beginPath(); rrect(c, x, y, Math.max(16, w * this.bossTrail), 16, 8); c.fill();
+    const bw2 = Math.max(16, w * k);
+    c.fillStyle = B.enraged ? '#ff4a5e' : '#e8475f'; c.beginPath(); rrect(c, x, y, bw2, 16, 8); c.fill();
+    c.save(); c.beginPath(); rrect(c, x, y, bw2, 16, 8); c.clip(); c.fillStyle = 'rgba(40,20,60,0.25)'; c.fillRect(x, y + 10, bw2, 8); c.fillStyle = 'rgba(255,255,255,0.35)'; c.fillRect(x + 6, y + 2, bw2 - 12, 4); c.restore();
+    // quarter notches
+    c.fillStyle = 'rgba(59,34,53,0.55)'; for (let q = 1; q < 4; q++) c.fillRect(x + (w * q) / 4 - 1, y, 2, 16);
+    // a paw badge at the left end
+    c.fillStyle = '#ffd84d'; circ(c, x - 4, y + 8, 15); c.fill(); c.lineWidth = 3.5; c.strokeStyle = OUT; c.stroke();
+    c.fillStyle = OUT; circ(c, x - 4, y + 11, 5); c.fill(); for (let q = 0; q < 4; q++) { circ(c, x - 4 + (q - 1.5) * 4.2, y + 3.5 - (q === 1 || q === 2 ? 2 : 0), 2); c.fill(); }
+    // the name card slides in when the fight begins
+    if (Game.state === 'play' && !Dialog.open && this.bossCard < 2.8) this.bossCard += 1 / 60;
+    const ct = this.bossCard;
+    if (ct > 0 && ct < 2.8) {
+      const inK = easeOut(clamp(ct / 0.35, 0, 1)), outK = clamp((ct - 2.4) / 0.4, 0, 1), cy = SH * 0.32, bh = 86;
+      const off = (1 - inK) * -SW + outK * SW;
+      c.save(); c.translate(off, 0);
+      c.fillStyle = 'rgba(59,34,53,0.92)'; c.beginPath(); c.moveTo(0, cy - bh / 2 + 10); c.lineTo(SW, cy - bh / 2 - 10); c.lineTo(SW, cy + bh / 2 - 10); c.lineTo(0, cy + bh / 2 + 10); c.closePath(); c.fill();
+      c.fillStyle = '#e8475f'; c.fillRect(0, cy + bh / 2 - 4, SW, 5); c.fillStyle = '#ffd84d'; c.fillRect(0, cy - bh / 2 - 2, SW, 4);
+      const parts = B.name.split(/, | the /), main = parts[0], sub = B.name.slice(main.length).replace(/^, /, '').replace(/^ /, '') || ('Level ' + B.lv + ' boss');
+      c.textAlign = 'center'; c.font = `700 ${Math.min(46, SW / 12)}px Fredoka, ui-rounded, sans-serif`; c.lineWidth = 7; c.strokeStyle = OUT; c.strokeText(main.toUpperCase(), SW / 2, cy + 8); c.fillStyle = '#ffd84d'; c.fillText(main.toUpperCase(), SW / 2, cy + 8);
+      c.font = '600 17px Fredoka, ui-rounded, sans-serif'; c.lineWidth = 4; c.strokeText(sub, SW / 2, cy + 32); c.fillStyle = '#fff'; c.fillText(sub, SW / 2, cy + 32);
+      c.restore();
+    }
   }
   // a red edge when hurt badly
   if (G.hp < maxHp() * 0.25 && G.hp > 0) { const a = 0.25 + Math.sin(S.time * 6) * 0.1; const gr = c.createRadialGradient(SW / 2, SH / 2, Math.min(SW, SH) * 0.4, SW / 2, SH / 2, Math.max(SW, SH) * 0.75); gr.addColorStop(0, 'rgba(232,71,95,0)'); gr.addColorStop(1, `rgba(232,71,95,${a})`); c.fillStyle = gr; c.fillRect(0, 0, SW, SH); }

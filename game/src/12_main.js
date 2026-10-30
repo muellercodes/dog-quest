@@ -64,8 +64,14 @@ Game.fade = function (fn, text) {
   if (this.fading) return;
   this.fading = true;
   const f = $('#fade'); f.querySelector('.ft').textContent = text || '';
-  f.classList.add('on');
-  setTimeout(() => { try { fn(); } catch (e) { console.error(e); } setTimeout(() => { f.classList.remove('on'); this.fading = false; }, text ? 600 : 120); }, 320);
+  // close the iris on the hero when there is one on screen, else on the middle
+  const aim = () => {
+    const onHero = G && Game.state !== 'title';
+    const ix = onHero ? clamp(SW / 2 + (P.x - Cam.x) * Cam.z, 20, SW - 20) : SW / 2, iy = onHero ? clamp(SH / 2 + (P.y - 24 - Cam.y) * Cam.z, 20, SH - 20) : SH / 2;
+    f.style.setProperty('--ix', ix + 'px'); f.style.setProperty('--iy', iy + 'px');
+  };
+  aim(); f.classList.add('on');
+  setTimeout(() => { try { fn(); } catch (e) { console.error(e); } setTimeout(() => { aim(); f.classList.remove('on'); this.fading = false; }, text ? 600 : 120); }, 320);
 };
 Game.regionMusic = function () {
   if (S.scene === 'dungeon') return 'dungeon';
@@ -140,7 +146,7 @@ function updateCamera(dt) {
     const inHall = P.x < R.x || P.x > R.x + R.w;
     if (!inHall) {
       Cam.x = R.w + 80 > vw ? clamp(Cam.x, R.x - 40 + vw / 2, R.x + R.w + 40 - vw / 2) : lerp(Cam.x, R.x + R.w / 2, k);
-      Cam.y = R.h + 80 > vh ? clamp(Cam.y, R.y - 30 + vh / 2, R.y + R.h + 30 - vh / 2) : lerp(Cam.y, R.y + R.h / 2, k);
+      Cam.y = R.h + 80 + WEX > vh ? clamp(Cam.y, R.y - 30 - WEX + vh / 2, R.y + R.h + 30 - vh / 2) : lerp(Cam.y, R.y + R.h / 2 - WEX / 2, k);
     }
   }
   if (S.scene === 'world') { const vw = SW / Cam.z / 2, vh = SH / Cam.z / 2; Cam.x = clamp(Cam.x, vw, WW - vw); Cam.y = clamp(Cam.y, vh, WH - vh); }
@@ -225,6 +231,7 @@ Game.render = function (dt) {
     else if (it.pk) drawPick(c, it.pk);
     else if (it.draw) it.draw(c);
   }
+  if (S.scene === 'dungeon' && Game.state !== 'title') Dungeon.drawLight(c);
   if (Game.state !== 'title' && G) {
     // Squeaky floats along behind the hero
     const sq = this.sq, k = Math.min(1, dt * 4);
